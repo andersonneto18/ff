@@ -261,7 +261,7 @@ function NotificationSettings() {
 
 function Landing({ onLogin, onRegister }) {
   const stats = [
-    { label: 'Aposta máxima', value: '500€', icon: TrendingUp, color: 'text-green-300' },
+    { label: 'Aposta mínima', value: '2€', icon: TrendingUp, color: 'text-green-300' },
     { label: 'Saque p/ conta', value: '24h', icon: Banknote, color: 'text-yellow-300' },
     { label: 'Anti-trapaça', value: '100%', icon: Lock, color: 'text-blue-300' },
     { label: 'Verificação', value: 'Auto', icon: BadgeCheck, color: 'text-purple-300' },
@@ -342,7 +342,7 @@ function Landing({ onLogin, onRegister }) {
         </h1>
 
         <p className="text-base sm:text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto mb-3 px-2">
-          Aposta até <span className="text-green-300 font-bold">500€</span> por partida, vence e recebe direto na tua conta bancária.
+          Aposta de <span className="text-green-300 font-bold">2€ a 500€</span> por partida, vence e recebe direto na tua conta bancária.
           Verificação automática — <span className="text-white font-semibold">sem trapaças, sem discussões.</span>
         </p>
         <p className="text-sm text-purple-300 mb-6 font-medium flex flex-wrap justify-center gap-x-4 gap-y-1">
