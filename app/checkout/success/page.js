@@ -1,8 +1,8 @@
 'use client'
-import { useEffect, useState } from 'react'
+import { Suspense, useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 
-export default function CheckoutSuccess() {
+function CheckoutSuccessContent() {
   const router = useRouter()
   const params = useSearchParams()
   const type = params.get('type')
@@ -56,5 +56,25 @@ export default function CheckoutSuccess() {
         <p className="text-muted-foreground text-sm mt-3">A redirecionar para a carteira...</p>
       </div>
     </div>
+  )
+}
+
+function LoadingFallback() {
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-background px-4">
+      <div className="glow-card rounded-2xl p-10 max-w-md text-center border border-purple-500/30">
+        <div className="text-6xl mb-4">⏳</div>
+        <h1 className="text-2xl font-bold gradient-text mb-2">A verificar pagamento...</h1>
+        <p className="text-muted-foreground text-sm mt-3">Por favor aguarda...</p>
+      </div>
+    </div>
+  )
+}
+
+export default function CheckoutSuccess() {
+  return (
+    <Suspense fallback={<LoadingFallback />}>
+      <CheckoutSuccessContent />
+    </Suspense>
   )
 }
