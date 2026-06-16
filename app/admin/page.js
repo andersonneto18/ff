@@ -9,7 +9,7 @@ import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
-import { Shield, LayoutDashboard, Gamepad2, AlertTriangle, Users, LogOut, Flame, Coins, Activity, CheckCircle2, XCircle, Ban, ShieldCheck, Crown, Wallet as WalletIcon, Image as ImageIcon, Video, Scale, MessageSquare, Landmark, ClipboardList } from 'lucide-react'
+import { Shield, LayoutDashboard, Gamepad2, AlertTriangle, Users, LogOut, Flame, Coins, Activity, CheckCircle2, XCircle, Ban, ShieldCheck, Crown, Wallet as WalletIcon, Image as ImageIcon, Video, Scale, MessageSquare, Landmark, ClipboardList, TrendingUp, ArrowDownLeft, ArrowUpRight, CreditCard } from 'lucide-react'
 
 const fmt = (cents) => `${((cents || 0) / 100).toFixed(2)}€`
 
@@ -149,6 +149,53 @@ function DashboardSection() {
           </Card>
         ))}
       </div>
+
+      {/* Profit breakdown card */}
+      <Card className="mt-4 bg-zinc-900 border-emerald-500/30 p-5 relative overflow-hidden">
+        <div className="absolute -right-10 -top-10 w-48 h-48 rounded-full bg-gradient-to-br from-emerald-500 to-teal-500 opacity-5 blur-3xl" />
+        <div className="relative">
+          <div className="flex items-center gap-2 mb-5">
+            <TrendingUp className="w-5 h-5 text-emerald-400" />
+            <span className="font-bold text-white text-sm">Lucro Líquido da Plataforma</span>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="bg-zinc-800/60 rounded-lg p-4">
+              <div className="flex items-center gap-1.5 mb-2">
+                <ArrowDownLeft className="w-3.5 h-3.5 text-blue-400" />
+                <span className="text-xs text-zinc-400">Carregamentos (bruto)</span>
+              </div>
+              <div className="text-2xl font-black text-white">{fmt(stats?.totalTopupsCents)}</div>
+              <div className="text-xs text-zinc-500 mt-1">{stats?.topupCount ?? 0} transações</div>
+            </div>
+            <div className="bg-zinc-800/60 rounded-lg p-4">
+              <div className="flex items-center gap-1.5 mb-2">
+                <CreditCard className="w-3.5 h-3.5 text-orange-400" />
+                <span className="text-xs text-zinc-400">Taxa Stripe (est. 1,4% + 0,25€)</span>
+              </div>
+              <div className="text-2xl font-black text-orange-400">-{fmt(stats?.stripeFeesCents)}</div>
+              <div className="text-xs text-zinc-500 mt-1">Desconto estimado</div>
+            </div>
+            <div className="bg-zinc-800/60 rounded-lg p-4">
+              <div className="flex items-center gap-1.5 mb-2">
+                <ArrowUpRight className="w-3.5 h-3.5 text-red-400" />
+                <span className="text-xs text-zinc-400">Saques pagos aos jogadores</span>
+              </div>
+              <div className="text-2xl font-black text-red-400">-{fmt(stats?.withdrawalsPaidCents)}</div>
+              <div className="text-xs text-zinc-500 mt-1">Total pago</div>
+            </div>
+            <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-lg p-4">
+              <div className="flex items-center gap-1.5 mb-2">
+                <TrendingUp className="w-3.5 h-3.5 text-emerald-400" />
+                <span className="text-xs text-emerald-300 font-medium">Lucro Líquido</span>
+              </div>
+              <div className={`text-2xl font-black ${(stats?.netProfitCents ?? 0) >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                {fmt(stats?.netProfitCents)}
+              </div>
+              <div className="text-xs text-zinc-500 mt-1">Carregamentos − Stripe − Saques</div>
+            </div>
+          </div>
+        </div>
+      </Card>
     </div>
   )
 }

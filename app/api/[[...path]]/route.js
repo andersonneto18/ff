@@ -657,7 +657,7 @@ async function handleRoute(request, { params }) {
       }
 
       if (route === '/admin/dashboard' && method === 'GET') {
-        const [totalUsers, totalRooms, inProgress, finalized, disputes, conflicts, pendingReports, pendingWithdrawals, banned, commissions] = await Promise.all([
+        const [totalUsers, totalRooms, inProgress, finalized, disputes, conflicts, pendingReports, pendingWithdrawals, banned, commissions, topupAgg, withdrawalsPaidAgg] = await Promise.all([
           db.collection('users').countDocuments({ isAdmin: { $ne: true } }),
           db.collection('rooms').countDocuments({}),
           db.collection('rooms').countDocuments({ status: 'EM_ANDAMENTO' }),
@@ -671,10 +671,26 @@ async function handleRoute(request, { params }) {
             { $match: { type: 'commission' } },
             { $group: { _id: null, total: { $sum: '$amountCents' } } }
           ]).toArray(),
+          db.collection('transactions').aggregate([
+            { $match: { type: 'topup' } },
+            { $group: { _id: null, total: { $sum: '$amountCents' }, count: { $sum: 1 } } }
+          ]).toArray(),
+          db.collection('withdrawals').aggregate([
+            { $match: { status: 'PAGO' } },
+            { $group: { _id: null, total: { $sum: '$amountCents' } } }
+          ]).toArray(),
         ])
+        const STRIPE_FEE_PCT = parseFloat(process.env.STRIPE_FEE_PERCENT || '1.4') / 100
+        const STRIPE_FEE_FIXED_CENTS = parseInt(process.env.STRIPE_FEE_FIXED_CENTS || '25')
+        const totalTopupsCents = topupAgg[0]?.total || 0
+        const topupCount = topupAgg[0]?.count || 0
+        const stripeFeesCents = Math.round(totalTopupsCents * STRIPE_FEE_PCT) + (topupCount * STRIPE_FEE_FIXED_CENTS)
+        const withdrawalsPaidCents = withdrawalsPaidAgg[0]?.total || 0
+        const netProfitCents = totalTopupsCents - stripeFeesCents - withdrawalsPaidCents
         return J({
           totalUsers, totalRooms, inProgress, finalized, disputes, conflicts, pendingReports, pendingWithdrawals, banned,
           revenueCents: commissions[0]?.total || 0,
+          totalTopupsCents, topupCount, stripeFeesCents, withdrawalsPaidCents, netProfitCents,
         })
       }
 
