@@ -94,6 +94,23 @@ function AdminLogin({ onSuccess }) {
 // -------- DASHBOARD --------
 function DashboardSection() {
   const [stats, setStats] = useState(null)
+  const [topupsEnabled, setTopupsEnabled] = useState(true)
+  const [togglingTopups, setTogglingTopups] = useState(false)
+
+  useEffect(() => {
+    api('/admin/settings').then(s => setTopupsEnabled(s.topupsEnabled)).catch(() => {})
+  }, [])
+
+  const toggleTopups = async () => {
+    setTogglingTopups(true)
+    try {
+      const res = await api('/admin/settings', { method: 'POST', body: JSON.stringify({ topupsEnabled: !topupsEnabled }) })
+      setTopupsEnabled(res.topupsEnabled)
+      toast.success(res.topupsEnabled ? 'Carregamentos activados' : 'Carregamentos desactivados')
+    } catch (e) { toast.error(e.message) }
+    finally { setTogglingTopups(false) }
+  }
+
   useEffect(() => { api('/admin/dashboard').then(setStats).catch(e => toast.error(e.message)); const i = setInterval(() => api('/admin/dashboard').then(setStats).catch(() => {}), 8000); return () => clearInterval(i) }, [])
   const cards = [
     { label: 'Total Jogadores', v: stats?.totalUsers, I: Users, color: 'from-purple-500 to-blue-500' },
@@ -108,7 +125,18 @@ function DashboardSection() {
   ]
   return (
     <div>
-      <h1 className="text-3xl font-bold text-white mb-6">Dashboard</h1>
+      <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
+        <h1 className="text-3xl font-bold text-white">Dashboard</h1>
+        <Card className={`flex items-center gap-3 px-4 py-3 border ${topupsEnabled ? 'bg-green-500/10 border-green-500/40' : 'bg-red-500/10 border-red-500/40'}`}>
+          <div>
+            <div className="text-xs text-zinc-400">Carregamentos</div>
+            <div className={`text-sm font-bold ${topupsEnabled ? 'text-green-300' : 'text-red-300'}`}>{topupsEnabled ? 'Activos' : 'Desactivados'}</div>
+          </div>
+          <Button size="sm" disabled={togglingTopups} onClick={toggleTopups} className={topupsEnabled ? 'bg-red-600 hover:bg-red-700' : 'bg-green-600 hover:bg-green-700'}>
+            {togglingTopups ? '...' : topupsEnabled ? 'Desactivar' : 'Activar'}
+          </Button>
+        </Card>
+      </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {cards.map((c, i) => (
           <Card key={i} className="bg-zinc-900 border-zinc-800 p-5 relative overflow-hidden">

@@ -295,7 +295,7 @@ function Landing({ onLogin, onRegister }) {
       icon: TrendingUp,
       color: 'bg-yellow-500/15 text-yellow-300',
       title: 'Apostas até 500€',
-      desc: 'Escolhe o valor que queres arriscar — de 1€ a 500€ por partida. Tu controlas o risco.',
+      desc: 'Escolhe o valor que queres arriscar — de 2€ a 500€ por partida. Tu controlas o risco.',
     },
     {
       icon: Zap,
@@ -568,7 +568,7 @@ function CreateRoomDialog({ open, onOpenChange, balanceCents, onNeedTopup, onSuc
           </div>
           <div>
             <Label>💰 Valor da Aposta (€)</Label>
-            <Input type="number" min="1" step="0.50" value={form.betEuros} onChange={e => setForm({ ...form, betEuros: e.target.value })} required placeholder="ex: 5" />
+            <Input type="number" min="2" step="0.50" value={form.betEuros} onChange={e => setForm({ ...form, betEuros: e.target.value })} required placeholder="ex: 5" />
           </div>
           <div>
             <Label>🎮 Modo</Label>
@@ -590,8 +590,8 @@ function CreateRoomDialog({ open, onOpenChange, balanceCents, onNeedTopup, onSuc
             <div className="flex justify-between"><span className="text-muted-foreground">A tua aposta:</span><b>{betNum.toFixed(2)}€</b></div>
             <div className="flex justify-between"><span className="text-muted-foreground">Aposta adversário:</span><b>{betNum.toFixed(2)}€</b></div>
             <div className="flex justify-between text-purple-300"><span>Pote total:</span><b>{(betNum*2).toFixed(2)}€</b></div>
-            <div className="flex justify-between"><span className="text-muted-foreground">Comissão 10%:</span><span>-{(betNum*2*0.10).toFixed(2)}€</span></div>
-            <div className="flex justify-between text-green-300 text-base font-bold"><span>Prémio vencedor:</span><span>{(betNum*2*0.90).toFixed(2)}€</span></div>
+            <div className="flex justify-between"><span className="text-muted-foreground">Comissão 20%:</span><span>-{(betNum*2*0.20).toFixed(2)}€</span></div>
+            <div className="flex justify-between text-green-300 text-base font-bold"><span>Prémio vencedor:</span><span>{(betNum*2*0.80).toFixed(2)}€</span></div>
           </div>
 
           {!hasBalance && betNum >= 1 && (
@@ -823,7 +823,7 @@ function RoomDetail({ roomId, me, onBack, refreshMe }) {
             <div className="text-3xl sm:text-5xl font-black gradient-text">{fmt(room.betAmountCents)}</div>
             <div className="text-xs text-muted-foreground uppercase tracking-wider mt-1">Aposta cada</div>
             <Swords className="w-6 h-6 sm:w-8 sm:h-8 mx-auto mt-2 sm:mt-3 text-purple-400" />
-            <div className="text-xs text-green-300 mt-1">Prémio: {fmt(room.betAmountCents * 2 * 0.9)}</div>
+            <div className="text-xs text-green-300 mt-1">Prémio: {fmt(Math.round(room.betAmountCents * 2 * 0.80))}</div>
           </div>
           {opponent ? <PlayerCard user={opponent} label="Adversário" /> :
             <div className="glow-card rounded-xl p-4 text-center border-dashed border-purple-500/30">
@@ -1037,7 +1037,7 @@ function WalletView({ refreshMe }) {
 
   const request = async () => {
     const cents = Math.round(parseFloat(form.amountEuros || '0') * 100)
-    if (!cents || cents < 500) return toast.error('Valor mínimo de levantamento: 5€')
+    if (!cents || cents < 1000) return toast.error('Valor mínimo de levantamento: 10€')
     if (cents > (data?.balanceCents || 0)) return toast.error('Saldo insuficiente')
     setBusy(true)
     try {
@@ -1159,7 +1159,7 @@ function WalletView({ refreshMe }) {
             </div>
             <div>
               <Label>Valor personalizado (€)</Label>
-              <Input type="number" min="1" step="0.50" value={topupAmount} onChange={e => setTopupAmount(e.target.value)} />
+              <Input type="number" min="5" step="0.50" value={topupAmount} onChange={e => setTopupAmount(e.target.value)} />
             </div>
             <Button onClick={startTopup} disabled={busy || !parseFloat(topupAmount)} className="w-full bg-gradient-to-r from-green-600 to-emerald-500 h-11 font-bold">
               {busy ? 'A redirecionar...' : `Pagar ${parseFloat(topupAmount || 0).toFixed(2)}€`}
@@ -1183,8 +1183,8 @@ function WalletView({ refreshMe }) {
               </div>
             )}
             <div>
-              <Label>Valor (mínimo 5€, disponível: {fmt(data?.balanceCents)})</Label>
-              <Input type="number" min="5" step="0.01" value={form.amountEuros} onChange={e => setForm({ ...form, amountEuros: e.target.value })} />
+              <Label>Valor (mínimo 10€, disponível: {fmt(data?.balanceCents)})</Label>
+              <Input type="number" min="10" step="0.01" value={form.amountEuros} onChange={e => setForm({ ...form, amountEuros: e.target.value })} />
             </div>
           </div>
           <DialogFooter><Button onClick={request} disabled={busy} className="bg-gradient-to-r from-purple-600 to-blue-500">{busy ? 'A processar...' : 'Pedir Levantamento'}</Button></DialogFooter>
@@ -1280,6 +1280,15 @@ function Stat({ label, value, color }) {
 }
 
 function Shell({ me, onLogout, view, setView, children }) {
+  const [topupsEnabled, setTopupsEnabled] = useState(true)
+  useEffect(() => {
+    fetch('/api/platform-status').then(r => r.json()).then(d => setTopupsEnabled(d.topupsEnabled)).catch(() => {})
+    const i = setInterval(() => {
+      fetch('/api/platform-status').then(r => r.json()).then(d => setTopupsEnabled(d.topupsEnabled)).catch(() => {})
+    }, 30000)
+    return () => clearInterval(i)
+  }, [])
+
   const nav = [
     ['rooms', 'Arena', Gamepad2],
     ['mine', 'Salas', Swords],
@@ -1312,6 +1321,12 @@ function Shell({ me, onLogout, view, setView, children }) {
           <Button variant="ghost" size="sm" onClick={onLogout} className="shrink-0"><LogOut className="w-4 h-4" /></Button>
         </div>
       </nav>
+      {!topupsEnabled && (
+        <div className="bg-yellow-500/10 border-b border-yellow-500/40 px-4 py-2.5 flex items-center justify-center gap-2 text-sm text-yellow-300">
+          <span>⚠️</span>
+          <span><b>Plataforma em manutenção</b> — Os carregamentos estão temporariamente desactivados. Os teus jogos e saldo estão seguros.</span>
+        </div>
+      )}
       <main className="max-w-7xl mx-auto p-3 sm:p-4 md:p-8">{children}</main>
       <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 backdrop-blur-xl bg-background/95 border-t border-purple-500/20">
         <div className="flex items-center justify-around py-1.5 px-1 safe-area-bottom">

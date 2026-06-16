@@ -107,6 +107,12 @@ async function handleRoute(request, { params }) {
     // ===== HEALTH =====
     if (route === '/' && method === 'GET') return J({ ok: true, app: 'FF Arena' })
 
+    // ===== PLATFORM STATUS (public) =====
+    if (route === '/platform-status' && method === 'GET') {
+      const setting = await db.collection('platform_settings').findOne({ key: 'topupsEnabled' })
+      return J({ topupsEnabled: setting ? setting.value !== '0' : true })
+    }
+
     // ===== AUTH =====
     if (route === '/auth/register' && method === 'POST') {
       const body = await request.json()
@@ -165,7 +171,7 @@ async function handleRoute(request, { params }) {
       const b = await request.json()
       const { betEuros, mode, roomType, scheduledTime, server, weapons, platform, notes } = b
       const betEurNum = parseFloat(betEuros)
-      if (!betEurNum || betEurNum < 1 || betEurNum > 500) return ERR('Valor de aposta inválido (mínimo 1€, máximo 500€)')
+      if (!betEurNum || betEurNum < 2 || betEurNum > 500) return ERR('Valor de aposta inválido (mínimo 2€, máximo 500€)')
       if (!mode || !server || !weapons || !platform || !roomType) return ERR('Preenche todos os campos obrigatórios')
       const betCents = Math.round(betEurNum * 100)
       // Check internal balance
@@ -338,9 +344,11 @@ async function handleRoute(request, { params }) {
       const user = await getUserFromRequest(request)
       if (!user) return ERR('Não autenticado', 401)
       if (user.banned) return ERR('Conta banida', 403)
+      const topupSetting = await db.collection('platform_settings').findOne({ key: 'topupsEnabled' })
+      if (topupSetting && topupSetting.value === '0') return ERR('Carregamentos desativados. A plataforma está em manutenção.', 503)
       const { amountEuros } = await request.json()
       const cents = Math.round(parseFloat(amountEuros) * 100)
-      if (!cents || cents < 100) return ERR('Valor mínimo: 1€')
+      if (!cents || cents < 500) return ERR('Valor mínimo: 5€')
       if (cents > 500000) return ERR('Valor máximo: 5000€ por transação')
 
       const baseUrl = process.env.NEXT_PUBLIC_BASE_URL
@@ -569,7 +577,7 @@ async function handleRoute(request, { params }) {
       if (user.banned) return ERR('Conta banida', 403)
       const { amountEuros } = await request.json()
       const cents = Math.round(parseFloat(amountEuros) * 100)
-      if (!cents || cents < 500) return ERR('Valor mínimo: 5€')
+      if (!cents || cents < 1000) return ERR('Valor mínimo: 10€')
       if (cents > (user.balanceCents || 0)) return ERR('Saldo insuficiente')
 
       const method = await db.collection('withdrawal_methods').findOne({ userId: user.id })
@@ -628,6 +636,25 @@ async function handleRoute(request, { params }) {
     if (route.startsWith('/admin/')) {
       const admin = await getUserFromRequest(request)
       if (!admin || !admin.isAdmin) return ERR('Acesso de administrador requerido', 403)
+
+      if (route === '/admin/settings' && method === 'GET') {
+        const rows = await db.collection('platform_settings').find({}).toArray()
+        const map = Object.fromEntries(rows.map(s => [s.key, s.value]))
+        return J({ topupsEnabled: map.topupsEnabled !== '0' })
+      }
+
+      if (route === '/admin/settings' && method === 'POST') {
+        const { topupsEnabled } = await request.json()
+        const val = topupsEnabled ? '1' : '0'
+        const existing = await db.collection('platform_settings').findOne({ key: 'topupsEnabled' })
+        if (existing) {
+          await db.collection('platform_settings').updateOne({ key: 'topupsEnabled' }, { $set: { value: val } })
+        } else {
+          await db.collection('platform_settings').insertOne({ key: 'topupsEnabled', value: val })
+        }
+        await logAudit(db, admin, topupsEnabled ? 'topups_enabled' : 'topups_disabled', 'platform', 'settings')
+        return J({ success: true, topupsEnabled })
+      }
 
       if (route === '/admin/dashboard' && method === 'GET') {
         const [totalUsers, totalRooms, inProgress, finalized, disputes, conflicts, pendingReports, pendingWithdrawals, banned, commissions] = await Promise.all([
