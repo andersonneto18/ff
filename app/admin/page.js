@@ -1257,6 +1257,23 @@ function TournamentsSection() {
 
             {selected === t.id && details && (
               <div className="mt-4 pt-4 border-t border-zinc-700 space-y-3">
+                {(details.participants || []).length > 0 && (
+                  <div>
+                    <div className="text-xs font-bold text-zinc-400 uppercase tracking-wider mb-2">👥 Inscritos ({details.participants.length})</div>
+                    <div className="flex flex-wrap gap-2">
+                      {details.participants.map(p => {
+                        const u = details.umap?.[p.userId]
+                        return (
+                          <div key={p.id} className="flex items-center gap-1.5 bg-zinc-800/60 rounded-lg px-2 py-1">
+                            {u?.photoUrl && <img src={u.photoUrl} className="w-5 h-5 rounded-full" />}
+                            <span className="text-xs text-white font-medium">{u?.ffNickname || u?.name || p.userId.slice(0,8)}</span>
+                            <span className="text-[10px] text-zinc-500">{u?.wins ?? 0}V/{u?.losses ?? 0}D</span>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
                 {[...new Set((details.matches || []).map(m => m.round))].map(round => (
                   <div key={round}>
                     <div className="text-xs font-bold text-purple-300 mb-2">Ronda {round}</div>
