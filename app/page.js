@@ -865,18 +865,28 @@ function RoomDetail({ roomId, me, onBack, refreshMe }) {
             <div className="text-center text-muted-foreground text-sm">A aguardar o criador iniciar a partida...</div>
           )}
           {room.status === 'EM_ANDAMENTO' && isParticipant && !myClaim && (
-            <div className="grid grid-cols-2 gap-3">
-              <Button onClick={() => claim('win')} disabled={busy} className="h-12 bg-green-600 hover:bg-green-700 font-bold">
-                <Trophy className="w-5 h-5 mr-2" /> Eu Ganhei
-              </Button>
-              <Button onClick={() => claim('loss')} disabled={busy} variant="destructive" className="h-12 font-bold">
-                <XCircle className="w-5 h-5 mr-2" /> Eu Perdi
+            <div className="space-y-2">
+              <div className="grid grid-cols-2 gap-3">
+                <Button onClick={() => claim('win')} disabled={busy} className="h-12 bg-green-600 hover:bg-green-700 font-bold">
+                  <Trophy className="w-5 h-5 mr-2" /> Eu Ganhei
+                </Button>
+                <Button onClick={() => claim('loss')} disabled={busy} variant="destructive" className="h-12 font-bold">
+                  <XCircle className="w-5 h-5 mr-2" /> Eu Perdi
+                </Button>
+              </div>
+              <Button variant="outline" onClick={() => setReportOpen(true)} className="w-full border-orange-500/40 text-orange-300 hover:bg-orange-500/10">
+                <AlertTriangle className="w-4 h-4 mr-2" /> Denunciar Problema
               </Button>
             </div>
           )}
           {room.status === 'EM_ANDAMENTO' && isParticipant && myClaim && (
-            <div className="text-center glow-card p-4 rounded-lg">
-              A analisar a resposta do outro jogador...
+            <div className="space-y-2">
+              <div className="text-center glow-card p-4 rounded-lg">
+                A analisar a resposta do outro jogador...
+              </div>
+              <Button variant="outline" onClick={() => setReportOpen(true)} className="w-full border-orange-500/40 text-orange-300 hover:bg-orange-500/10">
+                <AlertTriangle className="w-4 h-4 mr-2" /> Denunciar Problema
+              </Button>
             </div>
           )}
           {room.status === 'FINALIZADA' && (
