@@ -100,6 +100,8 @@ function DashboardSection() {
   const [togglingTopups, setTogglingTopups] = useState(false)
   const [stripeEnabled, setStripeEnabled] = useState(true)
   const [togglingStripe, setTogglingStripe] = useState(false)
+  const [bonusEnabled, setBonusEnabled] = useState(false)
+  const [togglingBonus, setTogglingBonus] = useState(false)
   const [mbwayPhone, setMbwayPhone] = useState('')
   const [mbwayPhoneInput, setMbwayPhoneInput] = useState('')
   const [savingPhone, setSavingPhone] = useState(false)
@@ -111,6 +113,7 @@ function DashboardSection() {
     api('/admin/settings').then(s => {
       setTopupsEnabled(s.topupsEnabled)
       setStripeEnabled(s.stripeEnabled)
+      setBonusEnabled(s.bonusEnabled || false)
       setMbwayPhone(s.mbwayPhone || '')
       setMbwayPhoneInput(s.mbwayPhone || '')
       setPlatformIban(s.platformIban || '')
@@ -136,6 +139,16 @@ function DashboardSection() {
       toast.success(res.stripeEnabled ? 'Pagamento por cartão activado' : 'Pagamento por cartão desactivado')
     } catch (e) { toast.error(e.message) }
     finally { setTogglingStripe(false) }
+  }
+
+  const toggleBonus = async () => {
+    setTogglingBonus(true)
+    try {
+      const res = await api('/admin/settings', { method: 'POST', body: JSON.stringify({ bonusEnabled: !bonusEnabled }) })
+      setBonusEnabled(res.bonusEnabled)
+      toast.success(res.bonusEnabled ? 'Banner de bónus activado' : 'Banner de bónus desactivado')
+    } catch (e) { toast.error(e.message) }
+    finally { setTogglingBonus(false) }
   }
 
   const saveMbwayPhone = async () => {
@@ -193,6 +206,15 @@ function DashboardSection() {
             </div>
             <Button size="sm" disabled={togglingStripe} onClick={toggleStripe} className={stripeEnabled ? 'bg-red-600 hover:bg-red-700' : 'bg-green-600 hover:bg-green-700'}>
               {togglingStripe ? '...' : stripeEnabled ? 'Desactivar' : 'Activar'}
+            </Button>
+          </Card>
+          <Card className={`flex items-center gap-3 px-4 py-3 border ${bonusEnabled ? 'bg-yellow-500/10 border-yellow-500/40' : 'bg-zinc-800 border-zinc-700'}`}>
+            <div>
+              <div className="text-xs text-zinc-400">Banner Bonus</div>
+              <div className={`text-sm font-bold ${bonusEnabled ? 'text-yellow-300' : 'text-zinc-400'}`}>{bonusEnabled ? '🎁 Activo' : 'Inactivo'}</div>
+            </div>
+            <Button size="sm" disabled={togglingBonus} onClick={toggleBonus} className={bonusEnabled ? 'bg-red-600 hover:bg-red-700' : 'bg-yellow-500 hover:bg-yellow-600 text-black'}>
+              {togglingBonus ? '...' : bonusEnabled ? 'Desactivar' : 'Activar'}
             </Button>
           </Card>
         </div>

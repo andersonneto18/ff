@@ -111,7 +111,7 @@ async function handleRoute(request, { params }) {
     if (route === '/platform-status' && method === 'GET') {
       const rows = await db.collection('platform_settings').find({}).toArray()
       const map = Object.fromEntries(rows.map(s => [s.key, s.value]))
-      return J({ topupsEnabled: map.topupsEnabled !== '0', stripeEnabled: map.stripeEnabled !== '0', mbwayPhone: map.mbwayPhone || null, platformIban: map.platformIban || null, commissionPercent: Math.round(COMMISSION * 100) })
+      return J({ topupsEnabled: map.topupsEnabled !== '0', stripeEnabled: map.stripeEnabled !== '0', bonusEnabled: map.bonusEnabled === '1', mbwayPhone: map.mbwayPhone || null, platformIban: map.platformIban || null, commissionPercent: Math.round(COMMISSION * 100) })
     }
 
     // ===== AUTH =====
@@ -784,7 +784,7 @@ async function handleRoute(request, { params }) {
       if (route === '/admin/settings' && method === 'GET') {
         const rows = await db.collection('platform_settings').find({}).toArray()
         const map = Object.fromEntries(rows.map(s => [s.key, s.value]))
-        return J({ topupsEnabled: map.topupsEnabled !== '0', stripeEnabled: map.stripeEnabled !== '0', mbwayPhone: map.mbwayPhone || null, platformIban: map.platformIban || null })
+        return J({ topupsEnabled: map.topupsEnabled !== '0', stripeEnabled: map.stripeEnabled !== '0', bonusEnabled: map.bonusEnabled === '1', mbwayPhone: map.mbwayPhone || null, platformIban: map.platformIban || null })
       }
 
       if (route === '/admin/settings' && method === 'POST') {
@@ -829,9 +829,19 @@ async function handleRoute(request, { params }) {
           }
           await logAudit(db, admin, 'platform_iban_updated', 'platform', 'settings', iban)
         }
+        if (typeof body.bonusEnabled !== 'undefined') {
+          const val = body.bonusEnabled ? '1' : '0'
+          const existing = await db.collection('platform_settings').findOne({ key: 'bonusEnabled' })
+          if (existing) {
+            await db.collection('platform_settings').updateOne({ key: 'bonusEnabled' }, { $set: { value: val } })
+          } else {
+            await db.collection('platform_settings').insertOne({ key: 'bonusEnabled', value: val })
+          }
+          await logAudit(db, admin, body.bonusEnabled ? 'bonus_banner_enabled' : 'bonus_banner_disabled', 'platform', 'settings')
+        }
         const updated = await db.collection('platform_settings').find({}).toArray()
         const map = Object.fromEntries(updated.map(s => [s.key, s.value]))
-        return J({ success: true, topupsEnabled: map.topupsEnabled !== '0', stripeEnabled: map.stripeEnabled !== '0', mbwayPhone: map.mbwayPhone || null, platformIban: map.platformIban || null })
+        return J({ success: true, topupsEnabled: map.topupsEnabled !== '0', stripeEnabled: map.stripeEnabled !== '0', bonusEnabled: map.bonusEnabled === '1', mbwayPhone: map.mbwayPhone || null, platformIban: map.platformIban || null })
       }
 
       if (route === '/admin/dashboard' && method === 'GET') {
