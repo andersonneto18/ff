@@ -900,7 +900,7 @@ function RoomDetail({ roomId, me, onBack, refreshMe }) {
                 {room.winnerId === creator?.id ? creator?.ffNickname : opponent?.ffNickname}
               </div>
               <div className="text-green-300 mt-2">Prémio: {fmt(room.prizeCents)}</div>
-              {isParticipant && (room.loserId === me?.id || (room.winnerId && room.winnerId !== me?.id)) && (
+              {isParticipant && me?.id && room.winnerId && room.winnerId !== me.id && (
                 <div className="mt-4 pt-4 border-t border-red-500/30">
                   <p className="text-sm text-muted-foreground mb-3">Achas que houve trapaça? Tens 24h para denunciar com provas.</p>
                   <Button onClick={() => setReportOpen(true)} variant="outline" className="border-red-500/50 text-red-300 hover:bg-red-500/10">
