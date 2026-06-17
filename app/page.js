@@ -1682,11 +1682,6 @@ function TournamentsView({ me }) {
                     </Button>
                   </div>
                 )}
-                {(t.mode || t.server || t.weapons || t.platform || t.rules) && (
-                  <Button variant="outline" size="sm" onClick={() => setRulesModal(t)} className="border-purple-500/40">
-                    📋 Ver Regras
-                  </Button>
-                )}
                 <Button variant="outline" size="sm" onClick={() => { setSelected(selected === t.id ? null : t.id); if (selected !== t.id) loadDetails(t.id) }} className="border-purple-500/40">
                   {selected === t.id ? 'Fechar' : 'Ver bracket'}
                 </Button>
