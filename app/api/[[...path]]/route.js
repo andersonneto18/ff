@@ -701,7 +701,7 @@ async function handleRoute(request, { params }) {
         if (tournament.status !== 'ABERTO') return ERR('Só podes sair antes do torneio começar')
         const participant = await db.collection('tournament_participants').findOne({ tournamentId: tId, userId: user.id })
         if (!participant) return ERR('Não estás inscrito neste torneio')
-        await db.collection('tournament_participants').deleteOne({ id: participant.id })
+        await db.collection('tournament_participants').deleteMany({ id: participant.id })
         await db.collection('tournaments').updateOne({ id: tId }, { $inc: { currentPlayers: -1 } })
         const fee = tournament.entryFeeCents || 0
         if (fee > 0) {
