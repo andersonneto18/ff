@@ -1056,12 +1056,12 @@ async function handleRoute(request, { params }) {
 
       if (route === '/admin/tournaments' && method === 'POST') {
         const b = await request.json()
-        const { name, description, entryFeeEuros, maxPlayers } = b
+        const { name, description, entryFeeEuros, maxPlayers, mode, server, weapons, platform } = b
         if (!name?.trim()) return ERR('Nome obrigatório')
         const fee = Math.round(parseFloat(entryFeeEuros || 0) * 100)
         const max = parseInt(maxPlayers) || 8
         if (max < 2 || max > 64) return ERR('Máximo de jogadores deve ser entre 2 e 64')
-        const t = { id: uuidv4(), name: name.trim(), description: description?.trim() || '', entryFeeCents: fee, maxPlayers: max, currentPlayers: 0, status: 'RASCUNHO', currentRound: 0, winnerId: null, prizeFirstCents: null, prizeSecondCents: null, commissionCents: null, createdAt: new Date(), startedAt: null, finishedAt: null }
+        const t = { id: uuidv4(), name: name.trim(), description: description?.trim() || '', entryFeeCents: fee, maxPlayers: max, currentPlayers: 0, status: 'RASCUNHO', currentRound: 0, winnerId: null, prizeFirstCents: null, prizeSecondCents: null, commissionCents: null, mode: mode?.trim() || null, server: server?.trim() || null, weapons: weapons?.trim() || null, platform: platform?.trim() || null, createdAt: new Date(), startedAt: null, finishedAt: null }
         await db.collection('tournaments').insertOne(t)
         await logAudit(db, admin, 'tournament_created', 'tournament', t.id, name)
         return J({ tournament: clean(t) })

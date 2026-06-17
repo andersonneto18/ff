@@ -1127,7 +1127,7 @@ function MbwayTopupsSection() {
 function TournamentsSection() {
   const [list, setList] = useState([])
   const [creating, setCreating] = useState(false)
-  const [form, setForm] = useState({ name: '', description: '', entryFeeEuros: '5', maxPlayers: '8' })
+  const [form, setForm] = useState({ name: '', description: '', entryFeeEuros: '5', maxPlayers: '8', mode: '', server: '', weapons: '', platform: 'Misto' })
   const [busy, setBusy] = useState(false)
   const [selected, setSelected] = useState(null)
   const [details, setDetails] = useState(null)
@@ -1148,7 +1148,7 @@ function TournamentsSection() {
     e.preventDefault(); setBusy(true)
     try {
       await api('/admin/tournaments', { method: 'POST', body: JSON.stringify(form) })
-      toast.success('Torneio criado'); setCreating(false); setForm({ name: '', description: '', entryFeeEuros: '5', maxPlayers: '8' }); load()
+      toast.success('Torneio criado'); setCreating(false); setForm({ name: '', description: '', entryFeeEuros: '5', maxPlayers: '8', mode: '', server: '', weapons: '', platform: 'Misto' }); load()
     } catch (err) { toast.error(err.message) } finally { setBusy(false) }
   }
 
@@ -1195,7 +1195,16 @@ function TournamentsSection() {
                   {[4,5,6,7,8,10,12,16,32].map(n => <option key={n} value={n}>{n} jogadores</option>)}
                 </select>
               </div>
-              <div><Label className="text-zinc-300">Descrição</Label><input value={form.description} onChange={e => setForm({...form, description: e.target.value})} placeholder="Modo, regras..." className="w-full mt-1 bg-zinc-800 border border-zinc-700 text-white rounded-md px-3 py-2 text-sm focus:outline-none focus:border-purple-500" /></div>
+              <div><Label className="text-zinc-300">Descrição</Label><input value={form.description} onChange={e => setForm({...form, description: e.target.value})} placeholder="Regras gerais, prémios..." className="w-full mt-1 bg-zinc-800 border border-zinc-700 text-white rounded-md px-3 py-2 text-sm focus:outline-none focus:border-purple-500" /></div>
+              <div><Label className="text-zinc-300">🎮 Modo</Label><input value={form.mode} onChange={e => setForm({...form, mode: e.target.value})} placeholder="ex: X1, Contra Squad, 2v2..." className="w-full mt-1 bg-zinc-800 border border-zinc-700 text-white rounded-md px-3 py-2 text-sm focus:outline-none focus:border-purple-500" /></div>
+              <div><Label className="text-zinc-300">🌐 Servidor</Label><input value={form.server} onChange={e => setForm({...form, server: e.target.value})} placeholder="ex: BR, EU, Ásia..." className="w-full mt-1 bg-zinc-800 border border-zinc-700 text-white rounded-md px-3 py-2 text-sm focus:outline-none focus:border-purple-500" /></div>
+              <div><Label className="text-zinc-300">🔫 Armas Permitidas</Label><input value={form.weapons} onChange={e => setForm({...form, weapons: e.target.value})} placeholder="ex: Todas, AK, M4A1..." className="w-full mt-1 bg-zinc-800 border border-zinc-700 text-white rounded-md px-3 py-2 text-sm focus:outline-none focus:border-purple-500" /></div>
+              <div>
+                <Label className="text-zinc-300">📱 Plataforma</Label>
+                <select value={form.platform} onChange={e => setForm({...form, platform: e.target.value})} className="w-full mt-1 bg-zinc-800 border border-zinc-700 text-white rounded-md px-3 py-2 text-sm focus:outline-none focus:border-purple-500">
+                  {['Mobile','Emulador','Mobilador','Misto'].map(v => <option key={v} value={v}>{v}</option>)}
+                </select>
+              </div>
             </div>
             {form.entryFeeEuros > 0 && (
               <div className="text-xs text-zinc-400 bg-zinc-800/60 rounded p-3">

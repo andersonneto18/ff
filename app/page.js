@@ -1603,6 +1603,14 @@ function TournamentsView({ me }) {
                     <Badge variant="outline" className={`${st.cls} border-0 text-xs`}>{st.l}</Badge>
                   </div>
                   {t.description && <p className="text-sm text-muted-foreground mt-0.5">{t.description}</p>}
+                  {(t.mode || t.server || t.weapons || t.platform) && (
+                    <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1 text-xs text-muted-foreground">
+                      {t.mode && <span><span className="text-purple-300">🎮</span> {t.mode}</span>}
+                      {t.server && <span><span className="text-purple-300">🌐</span> {t.server}</span>}
+                      {t.weapons && <span><span className="text-purple-300">🔫</span> {t.weapons}</span>}
+                      {t.platform && <span><span className="text-purple-300">📱</span> {t.platform}</span>}
+                    </div>
+                  )}
                 </div>
                 <div className="text-right shrink-0">
                   <div className="text-2xl font-black text-yellow-300">{t.entryFeeCents > 0 ? `${(t.entryFeeCents/100).toFixed(2)}€` : 'GRÁTIS'}</div>
