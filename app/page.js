@@ -1018,6 +1018,7 @@ function WalletView({ refreshMe, stripeEnabled }) {
   const [platformIban, setPlatformIban] = useState(null)
   const [mbwayProof, setMbwayProof] = useState(null)
   const [mbwayTopups, setMbwayTopups] = useState([])
+  const [showAllTxns, setShowAllTxns] = useState(false)
   const [form, setForm] = useState({ amountEuros: '10' })
   const [methodForm, setMethodForm] = useState({ fullName: '', type: 'IBAN', iban: '', mbway: '', bank: '', notes: '' })
   const [busy, setBusy] = useState(false)
@@ -1196,13 +1197,18 @@ function WalletView({ refreshMe, stripeEnabled }) {
       <Card className="glow-card p-5 border-purple-500/20">
         <h3 className="font-bold mb-3 flex items-center gap-2"><Activity className="w-4 h-4" />Histórico de Transações</h3>
         <div className="space-y-2">
-          {(data?.transactions || []).map(t => (
+          {(showAllTxns ? (data?.transactions || []) : (data?.transactions || []).slice(0, 5)).map(t => (
             <div key={t.id} className="flex items-center justify-between text-sm border-b border-border/40 pb-2">
               <div><div className="font-medium">{t.description}</div><div className="text-xs text-muted-foreground">{new Date(t.createdAt).toLocaleString('pt-PT')}</div></div>
               <div className={t.amountCents > 0 ? 'text-green-300 font-bold' : 'text-red-300 font-bold'}>{t.amountCents > 0 ? '+' : ''}{fmt(t.amountCents)}</div>
             </div>
           ))}
           {!data?.transactions?.length && <div className="text-sm text-muted-foreground">Sem transações</div>}
+          {(data?.transactions?.length || 0) > 5 && (
+            <button onClick={() => setShowAllTxns(v => !v)} className="text-xs text-purple-400 hover:text-purple-300 pt-1">
+              {showAllTxns ? '▲ Mostrar menos' : `▼ Ver todos (${data.transactions.length})`}
+            </button>
+          )}
         </div>
       </Card>
 
