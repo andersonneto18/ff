@@ -1385,9 +1385,6 @@ function WalletView({ refreshMe, stripeEnabled }) {
         <DialogContent className="bg-card border-purple-500/30 w-[calc(100vw-2rem)] sm:max-w-md">
           <DialogHeader><DialogTitle>Sacar Saldo</DialogTitle></DialogHeader>
           <div className="space-y-3">
-            <div className="text-sm text-muted-foreground">
-              O valor pedido fica reservado do teu saldo com o estado "Pendente" até a equipa FF Arena efetuar o pagamento manualmente para o método configurado.
-            </div>
             {method && (
               <div className="text-xs text-muted-foreground bg-muted/20 border border-border/40 rounded-lg px-3 py-2 space-y-0.5">
                 <div><b>Titular:</b> {method.fullName}</div>
@@ -1396,8 +1393,8 @@ function WalletView({ refreshMe, stripeEnabled }) {
               </div>
             )}
             <div>
-              <Label>Valor (mínimo 10€, disponível: {fmt(data?.balanceCents)})</Label>
-              <Input type="number" min="10" step="0.01" value={form.amountEuros} onChange={e => setForm({ ...form, amountEuros: e.target.value })} />
+              <Label>Valor (mínimo 2€, disponível: {fmt(data?.balanceCents)})</Label>
+              <Input type="number" min="2" step="0.01" value={form.amountEuros} onChange={e => setForm({ ...form, amountEuros: e.target.value })} />
             </div>
           </div>
           <DialogFooter><Button onClick={request} disabled={busy} className="bg-gradient-to-r from-purple-600 to-blue-500">{busy ? 'A processar...' : 'Pedir Levantamento'}</Button></DialogFooter>
