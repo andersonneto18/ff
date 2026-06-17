@@ -170,7 +170,7 @@ async function handleRoute(request, { params }) {
       if (!user) return ERR('Não autenticado', 401)
       if (user.banned) return ERR('Conta banida', 403)
       const b = await request.json()
-      const { betEuros, mode, roomType, scheduledTime, server, weapons, platform, notes } = b
+      const { betEuros, mode, roomType, scheduledTime, server, weapons, platform, notes, characters } = b
       const betEurNum = parseFloat(betEuros)
       if (!betEurNum || betEurNum < 1 || betEurNum > 500) return ERR('Valor de aposta inválido (mínimo 1€, máximo 500€)')
       if (!mode || !server || !weapons || !platform || !roomType) return ERR('Preenche todos os campos obrigatórios')
@@ -187,7 +187,7 @@ async function handleRoute(request, { params }) {
         id: uuidv4(), creatorId: user.id, opponentId: null,
         betAmountCents: betCents,
         mode, roomType, scheduledTime: scheduledTime || null,
-        server, weapons, platform, notes: notes || '',
+        server, weapons, platform, notes: notes || '', characters: characters?.trim() || null,
         status: 'ABERTA',
         creatorPaid: true, opponentPaid: false,
         creatorPaidAt: new Date(),
@@ -1097,12 +1097,12 @@ async function handleRoute(request, { params }) {
 
       if (route === '/admin/tournaments' && method === 'POST') {
         const b = await request.json()
-        const { name, description, entryFeeEuros, maxPlayers, mode, server, weapons, platform, rules } = b
+        const { name, description, entryFeeEuros, maxPlayers, mode, server, weapons, platform, rules, characters } = b
         if (!name?.trim()) return ERR('Nome obrigatório')
         const fee = Math.round(parseFloat(entryFeeEuros || 0) * 100)
         const max = parseInt(maxPlayers) || 8
         if (max < 2 || max > 64) return ERR('Máximo de jogadores deve ser entre 2 e 64')
-        const t = { id: uuidv4(), name: name.trim(), description: description?.trim() || '', entryFeeCents: fee, maxPlayers: max, currentPlayers: 0, status: 'RASCUNHO', currentRound: 0, winnerId: null, prizeFirstCents: null, prizeSecondCents: null, commissionCents: null, mode: mode?.trim() || null, server: server?.trim() || null, weapons: weapons?.trim() || null, platform: platform?.trim() || null, rules: rules?.trim() || null, createdAt: new Date(), startedAt: null, finishedAt: null }
+        const t = { id: uuidv4(), name: name.trim(), description: description?.trim() || '', entryFeeCents: fee, maxPlayers: max, currentPlayers: 0, status: 'RASCUNHO', currentRound: 0, winnerId: null, prizeFirstCents: null, prizeSecondCents: null, commissionCents: null, mode: mode?.trim() || null, server: server?.trim() || null, weapons: weapons?.trim() || null, platform: platform?.trim() || null, rules: rules?.trim() || null, characters: characters?.trim() || null, createdAt: new Date(), startedAt: null, finishedAt: null }
         await db.collection('tournaments').insertOne(t)
         await logAudit(db, admin, 'tournament_created', 'tournament', t.id, name)
         return J({ tournament: clean(t) })

@@ -531,7 +531,7 @@ function CreateRoomDialog({ open, onOpenChange, balanceCents, onNeedTopup, onSuc
   const api = useApi()
   const [loading, setLoading] = useState(false)
   const [commissionPct, setCommissionPct] = useState(15)
-  const [form, setForm] = useState({ betEuros: '1', mode: 'X1', roomType: 'Rápida', server: '', weapons: 'Todas', platform: 'Mobile', notes: '' })
+  const [form, setForm] = useState({ betEuros: '1', mode: 'X1', roomType: 'Rápida', server: '', weapons: 'Todas', platform: 'Mobile', characters: '', notes: '' })
   useEffect(() => {
     fetch('/api/platform-status').then(r => r.json()).then(d => { if (d.commissionPercent) setCommissionPct(d.commissionPercent) }).catch(() => {})
   }, [])
@@ -587,6 +587,7 @@ function CreateRoomDialog({ open, onOpenChange, balanceCents, onNeedTopup, onSuc
               <SelectContent>{['Mobile','Emulador','Mobilador','Misto'].map(v => <SelectItem key={v} value={v}>{v}</SelectItem>)}</SelectContent>
             </Select>
           </div>
+          <div><Label>🧬 Habilidades de Personagens (opcional)</Label><Textarea value={form.characters} onChange={e => setForm({ ...form, characters: e.target.value })} rows={2} placeholder="ex: Sem Chrono, K permitido, proibido Alok..." /></div>
           <div><Label>📝 Observações (opcional)</Label><Textarea value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} rows={2} /></div>
 
           <div className="glow-card rounded-lg p-4 text-sm space-y-1.5">
@@ -845,6 +846,7 @@ function RoomDetail({ roomId, me, onBack, refreshMe }) {
           <Info label="Servidor" v={room.server || '-'} />
           <Info label="Armas" v={room.weapons} />
         </div>
+        {room.characters && <div className="text-sm text-muted-foreground mb-2"><b className="text-purple-300">🧬 Habilidades:</b> {room.characters}</div>}
         {room.notes && <div className="text-sm text-muted-foreground mb-4"><b className="text-purple-300">Observações:</b> {room.notes}</div>}
 
         <div className="space-y-3">
@@ -1655,15 +1657,16 @@ function TournamentsView({ me }) {
                 <div className="glow-card rounded-lg p-2"><div className="text-xs text-muted-foreground">2º Lugar</div><div className="font-bold text-zinc-300">{prize2}€</div></div>
               </div>
 
-              {(t.mode || t.server || t.weapons || t.platform || t.rules) && (
+              {(t.mode || t.server || t.weapons || t.platform || t.characters || t.rules) && (
                 <div className="bg-zinc-800/50 border border-zinc-700/60 rounded-lg p-3 mb-3">
                   <div className="text-xs font-bold text-purple-300 uppercase tracking-wider mb-2">📋 Regras da Partida</div>
                   <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
-                    {t.mode     && <div><span className="text-zinc-400">🎮 Modo</span> <span className="text-white font-medium">{t.mode}</span></div>}
-                    {t.server   && <div><span className="text-zinc-400">🌐 Servidor</span> <span className="text-white font-medium">{t.server}</span></div>}
-                    {t.weapons  && <div><span className="text-zinc-400">🔫 Armas</span> <span className="text-white font-medium">{t.weapons}</span></div>}
-                    {t.platform && <div><span className="text-zinc-400">📱 Plataforma</span> <span className="text-white font-medium">{t.platform}</span></div>}
+                    {t.mode       && <div><span className="text-zinc-400">🎮 Modo</span> <span className="text-white font-medium">{t.mode}</span></div>}
+                    {t.server     && <div><span className="text-zinc-400">🌐 Servidor</span> <span className="text-white font-medium">{t.server}</span></div>}
+                    {t.weapons    && <div><span className="text-zinc-400">🔫 Armas</span> <span className="text-white font-medium">{t.weapons}</span></div>}
+                    {t.platform   && <div><span className="text-zinc-400">📱 Plataforma</span> <span className="text-white font-medium">{t.platform}</span></div>}
                   </div>
+                  {t.characters && <p className="text-xs text-zinc-300 mt-2 pt-2 border-t border-zinc-700/60"><span className="text-zinc-400">🧬 Habilidades:</span> {t.characters}</p>}
                   {t.rules && <p className="text-xs text-zinc-300 mt-2 pt-2 border-t border-zinc-700/60 whitespace-pre-wrap">{t.rules}</p>}
                 </div>
               )}
