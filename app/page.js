@@ -1693,12 +1693,12 @@ function TournamentsView({ me }) {
                     const active = myMatch(details.matches)
                     const conflict = myConflict(details.matches)
                     if (active) {
-                      const oppId = active.player1Id === me?.id ? active.player2Id : active.player1Id
+                      const iAmP1 = active.player1Id === me?.id
+                      const oppId = iAmP1 ? active.player2Id : active.player1Id
                       const opp = details.umap?.[oppId]
-                      const myClaim = active.player1Id === me?.id ? active.claim1 : active.claim2
+                      const myClaim = iAmP1 ? active.claim1 : active.claim2
                       return (
                         <div className="relative overflow-hidden rounded-2xl border-2 border-yellow-500/50 bg-gradient-to-b from-yellow-500/10 via-purple-900/20 to-zinc-900/80 p-5">
-                          {/* Tournament badge */}
                           <div className="absolute top-3 right-3">
                             <Badge className="bg-yellow-500/20 text-yellow-300 border border-yellow-500/40 text-[10px] font-black">🏆 TORNEIO</Badge>
                           </div>
@@ -1707,18 +1707,33 @@ function TournamentsView({ me }) {
                             <span className="font-black text-yellow-300">Ronda {active.round} — O teu duelo</span>
                           </div>
                           {/* VS card */}
-                          <div className="flex items-center justify-between gap-3 mb-4">
+                          <div className="flex items-center justify-between gap-3 mb-3">
                             <div className="flex-1 text-center">
                               <Avatar className="w-14 h-14 mx-auto ring-2 ring-purple-500/60"><AvatarImage src={details.umap?.[me?.id]?.photoUrl} /><AvatarFallback>{details.umap?.[me?.id]?.ffNickname?.[0]}</AvatarFallback></Avatar>
                               <div className="font-bold text-sm mt-1">{details.umap?.[me?.id]?.ffNickname || 'Tu'}</div>
-                              <div className="text-xs text-muted-foreground">{details.umap?.[me?.id]?.wins}V</div>
+                              <div className="text-xs text-muted-foreground mb-1">{details.umap?.[me?.id]?.wins}V</div>
+                              {iAmP1
+                                ? <span className="inline-block bg-green-500/20 border border-green-500/40 text-green-300 text-[10px] font-bold px-2 py-0.5 rounded-full">🎮 Cria a sala</span>
+                                : <span className="inline-block bg-blue-500/20 border border-blue-500/40 text-blue-300 text-[10px] font-bold px-2 py-0.5 rounded-full">⚔️ Entra na sala</span>
+                              }
                             </div>
                             <div className="text-2xl font-black text-yellow-400">VS</div>
                             <div className="flex-1 text-center">
                               <Avatar className="w-14 h-14 mx-auto ring-2 ring-red-500/60"><AvatarImage src={opp?.photoUrl} /><AvatarFallback>{opp?.ffNickname?.[0]}</AvatarFallback></Avatar>
                               <div className="font-bold text-sm mt-1">{opp?.ffNickname || '?'}</div>
-                              <div className="text-xs text-muted-foreground">{opp?.wins}V</div>
+                              <div className="text-xs text-muted-foreground mb-1">{opp?.wins}V</div>
+                              {iAmP1
+                                ? <span className="inline-block bg-blue-500/20 border border-blue-500/40 text-blue-300 text-[10px] font-bold px-2 py-0.5 rounded-full">⚔️ Entra na sala</span>
+                                : <span className="inline-block bg-green-500/20 border border-green-500/40 text-green-300 text-[10px] font-bold px-2 py-0.5 rounded-full">🎮 Cria a sala</span>
+                              }
                             </div>
+                          </div>
+                          {/* Room creation instruction */}
+                          <div className={`text-xs text-center rounded-lg px-3 py-2 mb-3 ${iAmP1 ? 'bg-green-500/10 border border-green-500/20 text-green-300' : 'bg-blue-500/10 border border-blue-500/20 text-blue-300'}`}>
+                            {iAmP1
+                              ? '🎮 Cria a sala no Free Fire e partilha a senha com o teu adversário'
+                              : '⚔️ Aguarda que o teu adversário crie a sala e partilhe a senha contigo'
+                            }
                           </div>
                           {!myClaim ? (
                             <div className="space-y-2">
