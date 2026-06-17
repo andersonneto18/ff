@@ -442,14 +442,12 @@ function ReportsSection() {
                 <div className="text-zinc-200">{r.reason || '(sem motivo descrito)'}</div>
               </div>
 
-              {(r.videoUrl || (r.screenshots && r.screenshots.length > 0)) && (
+              {(r.videoData || (r.screenshots && r.screenshots.length > 0)) && (
                 <div className="mb-3">
                   <div className="text-xs text-zinc-400 mb-2">📸 Provas</div>
                   <div className="flex gap-2 flex-wrap">
-                    {r.videoUrl && (
-                      <a href={r.videoUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 bg-zinc-800 hover:bg-zinc-700 rounded px-3 py-2 text-sm text-blue-300">
-                        <Video className="w-4 h-4" /> Ver vídeo
-                      </a>
+                    {r.videoData && (
+                      <video src={r.videoData} controls className="w-full max-w-sm rounded border border-zinc-700 max-h-48" />
                     )}
                     {(r.screenshots || []).map((s, i) => (
                       <a key={i} href={s} target="_blank" rel="noreferrer" className="block">

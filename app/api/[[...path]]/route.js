@@ -319,10 +319,9 @@ async function handleRoute(request, { params }) {
       }
 
       if (action === 'report' && method === 'POST') {
-        const { reason, videoUrl, screenshots } = await request.json()
+        const { reason, videoData, screenshots } = await request.json()
         if (room.creatorId !== user.id && room.opponentId !== user.id) return ERR('Não és participante', 403)
         if (!['EM_ANDAMENTO', 'EM_CONFLITO', 'EM_DISPUTA', 'FINALIZADA'].includes(room.status)) return ERR('Estado da sala não permite denúncia')
-        // For FINALIZADA: only loser can dispute, within 24h of finish
         if (room.status === 'FINALIZADA') {
           if (room.winnerId === user.id) return ERR('O vencedor não pode denunciar')
           const finishedAgo = Date.now() - new Date(room.finishedAt || 0).getTime()
@@ -331,10 +330,9 @@ async function handleRoute(request, { params }) {
         const sc = Array.isArray(screenshots) ? screenshots.filter(Boolean).slice(0, 6) : []
         await db.collection('reports').insertOne({
           id: uuidv4(), roomId: room.id, reporterId: user.id, reason: reason || '',
-          videoUrl: videoUrl || '', screenshots: sc, status: 'PENDENTE',
+          videoData: videoData || null, screenshots: sc, status: 'PENDENTE',
           createdAt: new Date(),
         })
-        // Move room to EM_DISPUTA so admin sees it; don't revert payout until admin decides
         await db.collection('rooms').updateOne({ id: roomId }, { $set: { status: 'EM_DISPUTA', previousStatus: room.status } })
         return J({ ok: true })
       }
@@ -785,10 +783,10 @@ async function handleRoute(request, { params }) {
             })
           }
           await finalizeRoom(db, { ...room, status: 'EM_DISPUTA' }, report.reporterId, 'report_accepted')
-          await db.collection('reports').updateOne({ id: reportId }, { $set: { status: 'ACEITE', processedAt: new Date() } })
+          await db.collection('reports').updateOne({ id: reportId }, { $set: { status: 'ACEITE', processedAt: new Date(), videoData: null, screenshots: [] } })
           return J({ ok: true })
         } else if (action === 'reject') {
-          await db.collection('reports').updateOne({ id: reportId }, { $set: { status: 'REJEITADA', processedAt: new Date() } })
+          await db.collection('reports').updateOne({ id: reportId }, { $set: { status: 'REJEITADA', processedAt: new Date(), videoData: null, screenshots: [] } })
           // If room is EM_DISPUTA, fall back: finalize with the player who claimed 'win' (not the reporter)
           if (room.status === 'EM_DISPUTA') {
             const claims = room.claims || {}

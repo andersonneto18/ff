@@ -746,7 +746,7 @@ function RoomDetail({ roomId, me, onBack, refreshMe }) {
   const [data, setData] = useState(null)
   const [busy, setBusy] = useState(false)
   const [reportOpen, setReportOpen] = useState(false)
-  const [report, setReport] = useState({ reason: '', videoUrl: '', files: [] })
+  const [report, setReport] = useState({ reason: '', videoFile: null, files: [] })
 
   const load = useCallback(async () => {
     try { const d = await api('/rooms/' + roomId); setData(d) } catch (e) { toast.error(e.message) }
@@ -795,22 +795,21 @@ function RoomDetail({ roomId, me, onBack, refreshMe }) {
   const submitReport = async () => {
     setBusy(true)
     try {
-      const files = await Promise.all((report.files || []).slice(0, 4).map(f => new Promise((resolve, reject) => {
-        if (f.size > 2 * 1024 * 1024) return reject(new Error(`Ficheiro ${f.name} excede 2MB`))
+      const readFile = (f, maxMB) => new Promise((resolve, reject) => {
+        if (f.size > maxMB * 1024 * 1024) return reject(new Error(`${f.name} excede ${maxMB}MB`))
         const reader = new FileReader()
         reader.onload = () => resolve(reader.result)
         reader.onerror = () => reject(new Error('Erro a ler ' + f.name))
         reader.readAsDataURL(f)
-      })))
+      })
+      const screenshots = await Promise.all((report.files || []).slice(0, 4).map(f => readFile(f, 2)))
+      const videoData = report.videoFile ? await readFile(report.videoFile, 50) : null
       await api('/rooms/' + room.id + '/report', {
         method: 'POST',
-        body: JSON.stringify({
-          reason: report.reason, videoUrl: report.videoUrl,
-          screenshots: files,
-        })
+        body: JSON.stringify({ reason: report.reason, videoData, screenshots })
       })
       toast.success('Denúncia enviada. O administrador irá analisar.')
-      setReportOpen(false); setReport({ reason: '', videoUrl: '', files: [] }); load()
+      setReportOpen(false); setReport({ reason: '', videoFile: null, files: [] }); load()
     } catch (e) { toast.error(e.message) } finally { setBusy(false) }
   }
 
@@ -939,7 +938,7 @@ function RoomDetail({ roomId, me, onBack, refreshMe }) {
               <Textarea value={report.reason} onChange={e => setReport({ ...report, reason: e.target.value })} rows={3} placeholder={room.status === 'EM_CONFLITO' ? 'Descreve o que aconteceu na partida e porque o resultado está em conflito...' : 'Descreve o que aconteceu: hack, fraude, kill steal, comportamento abusivo...'} required />
             </div>
             <div>
-              <Label>📎 Imagens (máx 2MB cada, até 4 ficheiros)</Label>
+              <Label>📎 Capturas de ecrã (máx 2MB cada, até 4 imagens)</Label>
               <Input type="file" accept="image/*" multiple onChange={e => setReport({ ...report, files: Array.from(e.target.files || []).slice(0, 4) })} className="cursor-pointer" />
               {report.files?.length > 0 && (
                 <div className="mt-2 flex flex-wrap gap-2">
@@ -952,8 +951,13 @@ function RoomDetail({ roomId, me, onBack, refreshMe }) {
               )}
             </div>
             <div>
-              <Label>🎥 URL do vídeo (opcional - YouTube, Streamable...)</Label>
-              <Input value={report.videoUrl} onChange={e => setReport({ ...report, videoUrl: e.target.value })} placeholder="https://..." />
+              <Label>🎥 Vídeo de prova (opcional, máx 50MB)</Label>
+              <Input type="file" accept="video/*" onChange={e => setReport({ ...report, videoFile: e.target.files?.[0] || null })} className="cursor-pointer" />
+              {report.videoFile && (
+                <div className="mt-1 text-xs bg-blue-500/15 border border-blue-500/30 rounded px-2 py-1 flex items-center gap-1">
+                  🎥 {report.videoFile.name} ({(report.videoFile.size / (1024*1024)).toFixed(1)}MB)
+                </div>
+              )}
             </div>
           </div>
           <DialogFooter>
