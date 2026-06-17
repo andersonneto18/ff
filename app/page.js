@@ -1433,6 +1433,96 @@ function WalletView({ refreshMe, stripeEnabled }) {
   )
 }
 
+function SupportChat({ me }) {
+  const api = useApi()
+  const [open, setOpen] = useState(false)
+  const [messages, setMessages] = useState([])
+  const [text, setText] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [unread, setUnread] = useState(0)
+  const bottomRef = useRef(null)
+
+  const load = useCallback(async () => {
+    try {
+      const r = await api('/support/messages')
+      setMessages(r.messages || [])
+      if (!open) setUnread(r.unread || 0)
+      else setUnread(0)
+    } catch (e) {}
+  }, [api, open])
+
+  useEffect(() => { load(); const i = setInterval(load, 4000); return () => clearInterval(i) }, [load])
+  useEffect(() => { if (open) bottomRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages, open])
+
+  const send = async () => {
+    if (!text.trim()) return
+    setBusy(true)
+    try {
+      await api('/support/messages', { method: 'POST', body: JSON.stringify({ message: text.trim() }) })
+      setText('')
+      load()
+    } catch (e) { toast.error(e.message) } finally { setBusy(false) }
+  }
+
+  return (
+    <>
+      {open && (
+        <div className="fixed bottom-20 right-4 z-50 w-[min(360px,calc(100vw-2rem))] bg-zinc-900 border border-purple-500/40 rounded-2xl shadow-2xl flex flex-col" style={{ height: '420px' }}>
+          <div className="flex items-center justify-between px-4 py-3 border-b border-purple-500/20 bg-purple-600/10 rounded-t-2xl">
+            <div className="flex items-center gap-2">
+              <Shield className="w-4 h-4 text-purple-400" />
+              <span className="font-bold text-sm">Suporte FF Arena</span>
+            </div>
+            <button onClick={() => setOpen(false)} className="text-zinc-400 hover:text-white text-lg leading-none">×</button>
+          </div>
+          <div className="flex-1 overflow-y-auto p-3 space-y-2">
+            {messages.length === 0 && (
+              <div className="text-center text-zinc-500 text-xs pt-8">
+                <Shield className="w-8 h-8 mx-auto mb-2 text-purple-500/40" />
+                Envia uma mensagem para falar com o suporte.
+              </div>
+            )}
+            {messages.map(m => (
+              <div key={m.id} className={`flex ${m.sender === 'player' ? 'justify-end' : 'justify-start'}`}>
+                <div className={`max-w-[80%] rounded-xl px-3 py-2 text-sm ${m.sender === 'player' ? 'bg-purple-600/40 text-white' : 'bg-zinc-800 text-zinc-100'}`}>
+                  {m.sender === 'admin' && <div className="text-[10px] text-purple-400 font-bold mb-0.5">Suporte</div>}
+                  {m.message}
+                  <div className="text-[10px] text-zinc-500 mt-0.5 text-right">{new Date(m.createdAt).toLocaleTimeString('pt-PT', { hour: '2-digit', minute: '2-digit' })}</div>
+                </div>
+              </div>
+            ))}
+            <div ref={bottomRef} />
+          </div>
+          <div className="p-3 border-t border-purple-500/20 flex gap-2">
+            <input
+              value={text}
+              onChange={e => setText(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send() } }}
+              placeholder="Escreve a tua mensagem..."
+              className="flex-1 bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-purple-500"
+              maxLength={1000}
+            />
+            <button onClick={send} disabled={busy || !text.trim()} className="bg-purple-600 hover:bg-purple-700 disabled:opacity-40 text-white rounded-lg px-3 py-2">
+              <Send className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
+      <button
+        onClick={() => { setOpen(v => !v); setUnread(0) }}
+        className="fixed bottom-20 md:bottom-6 right-4 z-50 w-14 h-14 bg-purple-600 hover:bg-purple-700 rounded-full shadow-lg flex items-center justify-center transition"
+      >
+        <MessageSquare className="w-6 h-6 text-white" />
+        {unread > 0 && (
+          <span className="absolute -top-1 -right-1 min-w-[20px] h-5 px-1 rounded-full bg-red-500 text-white text-[11px] font-bold flex items-center justify-center">
+            {unread > 9 ? '9+' : unread}
+          </span>
+        )}
+      </button>
+    </>
+  )
+}
+
 function Ranking() {
   const api = useApi()
   const [type, setType] = useState('wins')
@@ -1474,7 +1564,7 @@ function Stat({ label, value, color }) {
   return <div className="glow-card p-4 rounded"><div className="text-xs text-muted-foreground">{label}</div><div className={`text-2xl font-black ${color || ''}`}>{value}</div></div>
 }
 
-function Shell({ me, onLogout, view, setView, children }) {
+function Shell({ me, onLogout, view, setView, children, stripeEnabled }) {
   const [topupsEnabled, setTopupsEnabled] = useState(true)
   useEffect(() => {
     const load = () => fetch('/api/platform-status').then(r => r.json()).then(d => { setTopupsEnabled(d.topupsEnabled) }).catch(() => {})
@@ -1522,6 +1612,7 @@ function Shell({ me, onLogout, view, setView, children }) {
         </div>
       )}
       <main className="max-w-7xl mx-auto p-3 sm:p-4 md:p-8">{children}</main>
+      <SupportChat me={me} />
       <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 backdrop-blur-xl bg-background/95 border-t border-purple-500/20">
         <div className="flex items-center justify-around py-1.5 px-1 safe-area-bottom">
           {nav.map(([k, l, I]) => (

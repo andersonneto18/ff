@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -9,7 +9,7 @@ import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
-import { Shield, LayoutDashboard, Gamepad2, AlertTriangle, Users, LogOut, Flame, Coins, Activity, CheckCircle2, XCircle, Ban, ShieldCheck, Crown, Wallet as WalletIcon, Image as ImageIcon, Video, Scale, MessageSquare, Landmark, ClipboardList, TrendingUp, ArrowDownLeft, ArrowUpRight, CreditCard, Smartphone, Copy } from 'lucide-react'
+import { Shield, LayoutDashboard, Gamepad2, AlertTriangle, Users, LogOut, Flame, Coins, Activity, CheckCircle2, XCircle, Ban, ShieldCheck, Crown, Wallet as WalletIcon, Image as ImageIcon, Video, Scale, MessageSquare, Landmark, ClipboardList, TrendingUp, ArrowDownLeft, ArrowUpRight, CreditCard, Smartphone, Copy, Send } from 'lucide-react'
 
 const fmt = (cents) => `${((cents || 0) / 100).toFixed(2)}€`
 
@@ -1057,6 +1057,117 @@ function MbwayTopupsSection() {
   )
 }
 
+// -------- SUPPORT --------
+function SupportSection() {
+  const [chats, setChats] = useState([])
+  const [active, setActive] = useState(null)
+  const [text, setText] = useState('')
+  const [busy, setBusy] = useState(false)
+  const bottomRef = useRef(null)
+
+  const load = useCallback(async () => {
+    try { const d = await api('/admin/support'); setChats(d.chats || []) } catch (e) {}
+  }, [])
+
+  useEffect(() => { load(); const i = setInterval(load, 4000); return () => clearInterval(i) }, [load])
+  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [active, chats])
+
+  const activeChat = chats.find(c => c.user?.id === active)
+  const totalUnread = chats.reduce((s, c) => s + (c.unread || 0), 0)
+
+  const send = async () => {
+    if (!text.trim() || !active) return
+    setBusy(true)
+    try {
+      await api(`/admin/support/${active}`, { method: 'POST', body: JSON.stringify({ message: text.trim() }) })
+      setText('')
+      load()
+    } catch (e) { toast.error(e.message) } finally { setBusy(false) }
+  }
+
+  const clearChat = async (userId) => {
+    if (!window.confirm('Apagar esta conversa?')) return
+    try {
+      await api('/admin/support/clear', { method: 'POST', body: JSON.stringify({ userId }) })
+      if (active === userId) setActive(null)
+      load()
+    } catch (e) { toast.error(e.message) }
+  }
+
+  return (
+    <div className="h-[calc(100vh-8rem)] flex gap-4">
+      {/* Conversation list */}
+      <div className="w-72 shrink-0 bg-zinc-900 rounded-xl border border-zinc-800 flex flex-col">
+        <div className="p-4 border-b border-zinc-800 flex items-center justify-between">
+          <h2 className="font-bold text-white flex items-center gap-2">
+            <MessageSquare className="w-4 h-4 text-purple-400" /> Suporte
+            {totalUnread > 0 && <span className="bg-red-500 text-white text-xs px-1.5 py-0.5 rounded-full">{totalUnread}</span>}
+          </h2>
+        </div>
+        <div className="flex-1 overflow-y-auto">
+          {chats.length === 0 && <div className="p-4 text-sm text-zinc-500 text-center">Sem conversas ainda</div>}
+          {chats.map(c => (
+            <button key={c.user?.id} onClick={() => setActive(c.user?.id)}
+              className={`w-full p-3 text-left border-b border-zinc-800/60 hover:bg-zinc-800/60 transition ${active === c.user?.id ? 'bg-purple-600/20 border-l-2 border-l-purple-500' : ''}`}>
+              <div className="flex items-center justify-between">
+                <div className="font-medium text-sm text-white truncate">{c.user?.ffNickname || c.user?.name}</div>
+                {c.unread > 0 && <span className="bg-red-500 text-white text-[10px] px-1.5 rounded-full shrink-0">{c.unread}</span>}
+              </div>
+              <div className="text-xs text-zinc-500 truncate mt-0.5">
+                {c.messages[c.messages.length - 1]?.message || ''}
+              </div>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Chat area */}
+      <div className="flex-1 bg-zinc-900 rounded-xl border border-zinc-800 flex flex-col">
+        {!activeChat ? (
+          <div className="flex-1 flex items-center justify-center text-zinc-500">
+            <div className="text-center"><MessageSquare className="w-10 h-10 mx-auto mb-2 opacity-30" /><p>Seleciona uma conversa</p></div>
+          </div>
+        ) : (
+          <>
+            <div className="p-4 border-b border-zinc-800 flex items-center justify-between">
+              <div>
+                <div className="font-bold text-white">{activeChat.user?.ffNickname || activeChat.user?.name}</div>
+                <div className="text-xs text-zinc-500">{activeChat.user?.email}</div>
+              </div>
+              <Button size="sm" variant="outline" onClick={() => clearChat(active)} className="border-red-500/40 text-red-300 hover:bg-red-500/10 text-xs">
+                🗑️ Limpar
+              </Button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-4 space-y-2">
+              {activeChat.messages.map(m => (
+                <div key={m.id} className={`flex ${m.sender === 'admin' ? 'justify-end' : 'justify-start'}`}>
+                  <div className={`max-w-[75%] rounded-xl px-3 py-2 text-sm ${m.sender === 'admin' ? 'bg-purple-600/40 text-white' : 'bg-zinc-800 text-zinc-100'}`}>
+                    {m.message}
+                    <div className="text-[10px] text-zinc-400 mt-0.5 text-right">{new Date(m.createdAt).toLocaleString('pt-PT')}</div>
+                  </div>
+                </div>
+              ))}
+              <div ref={bottomRef} />
+            </div>
+            <div className="p-3 border-t border-zinc-800 flex gap-2">
+              <input
+                value={text}
+                onChange={e => setText(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send() } }}
+                placeholder="Responder..."
+                className="flex-1 bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-purple-500"
+              />
+              <Button onClick={send} disabled={busy || !text.trim()} className="bg-purple-600 hover:bg-purple-700">
+                <Send className="w-4 h-4" />
+              </Button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
+
 // -------- LAYOUT --------
 function AdminLayout({ admin, onLogout }) {
   const [section, setSection] = useState('dashboard')
@@ -1069,6 +1180,7 @@ function AdminLayout({ admin, onLogout }) {
     ['mbway-topups', 'MB WAY', Smartphone],
     ['players', 'Jogadores', Users],
     ['audit', 'Auditoria', ClipboardList],
+    ['support', 'Suporte', MessageSquare],
   ]
   return (
     <div className="min-h-screen bg-zinc-950 text-white flex">
@@ -1122,6 +1234,7 @@ function AdminLayout({ admin, onLogout }) {
         {section === 'mbway-topups' && <MbwayTopupsSection />}
         {section === 'players' && <PlayersSection />}
         {section === 'audit' && <AuditSection />}
+        {section === 'support' && <SupportSection />}
       </main>
     </div>
   )

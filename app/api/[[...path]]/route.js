@@ -641,6 +641,29 @@ async function handleRoute(request, { params }) {
       return J({ withdrawal: clean(w) })
     }
 
+    // ===== SUPPORT CHAT =====
+    if (route === '/support/messages' && method === 'GET') {
+      const user = await getUserFromRequest(request)
+      if (!user) return ERR('Não autenticado', 401)
+      const msgs = await db.collection('support_messages').find({ userId: user.id }).sort({ createdAt: 1 }).limit(200).toArray()
+      const unread = msgs.filter(m => m.sender === 'admin' && !m.isRead).length
+      await db.collection('support_messages').updateOne({ userId: user.id, sender: 'admin', isRead: false }, { $set: { isRead: true } })
+      return J({ messages: msgs.map(clean), unread })
+    }
+
+    if (route === '/support/messages' && method === 'POST') {
+      const user = await getUserFromRequest(request)
+      if (!user) return ERR('Não autenticado', 401)
+      if (user.banned) return ERR('Conta banida', 403)
+      const { message } = await request.json()
+      const text = (message || '').trim()
+      if (!text) return ERR('Mensagem vazia')
+      if (text.length > 1000) return ERR('Mensagem demasiado longa')
+      const doc = { id: uuidv4(), userId: user.id, sender: 'player', message: text, isRead: false, createdAt: new Date() }
+      await db.collection('support_messages').insertOne(doc)
+      return J({ ok: true, message: clean(doc) })
+    }
+
     // ===== RANKING =====
     if (route === '/ranking' && method === 'GET') {
       const url = new URL(request.url)
@@ -915,6 +938,47 @@ async function handleRoute(request, { params }) {
           await logAudit(db, admin, 'withdrawal_rejected', 'withdrawal', wId, reason || '')
           return J({ ok: true })
         }
+      }
+
+      if (route === '/admin/support' && method === 'GET') {
+        const msgs = await db.collection('support_messages').find({}).sort({ createdAt: -1 }).limit(500).toArray()
+        const userIds = [...new Set(msgs.map(m => m.userId))]
+        const users = await db.collection('users').find({ id: { $in: userIds } }).toArray()
+        const umap = Object.fromEntries(users.map(u => [u.id, { id: u.id, name: u.name, ffNickname: u.ffNickname, email: u.email, photoUrl: u.photoUrl }]))
+        const chats = {}
+        for (const m of msgs) {
+          if (!chats[m.userId]) chats[m.userId] = { user: umap[m.userId] || { id: m.userId }, messages: [], unread: 0 }
+          chats[m.userId].messages.unshift(clean(m))
+          if (m.sender === 'player' && !m.isRead) chats[m.userId].unread++
+        }
+        return J({ chats: Object.values(chats).sort((a, b) => {
+          const aLast = a.messages[a.messages.length - 1]?.createdAt || 0
+          const bLast = b.messages[b.messages.length - 1]?.createdAt || 0
+          return new Date(bLast) - new Date(aLast)
+        })})
+      }
+
+      const supportReplyMatch = route.match(/^\/admin\/support\/([^\/]+)$/)
+      if (supportReplyMatch && method === 'POST') {
+        const targetUserId = supportReplyMatch[1]
+        const { message } = await request.json()
+        const text = (message || '').trim()
+        if (!text) return ERR('Mensagem vazia')
+        const doc = { id: uuidv4(), userId: targetUserId, sender: 'admin', message: text, isRead: false, createdAt: new Date() }
+        await db.collection('support_messages').insertOne(doc)
+        await db.collection('support_messages').updateOne({ userId: targetUserId, sender: 'player', isRead: false }, { $set: { isRead: true } })
+        await createNotification(db, targetUserId, 'support', 'Resposta do suporte', text.slice(0, 100))
+        return J({ ok: true, message: clean(doc) })
+      }
+
+      if (route === '/admin/support/clear' && method === 'POST') {
+        const { userId } = await request.json()
+        if (userId) {
+          await db.collection('support_messages').deleteMany({ userId })
+        } else {
+          await db.collection('support_messages').deleteMany({})
+        }
+        return J({ ok: true })
       }
 
       if (route === '/admin/reports/clear' && method === 'POST') {
