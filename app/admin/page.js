@@ -368,14 +368,30 @@ function ReportsSection() {
     finally { setBusy(false) }
   }
 
+  const clearHistory = async () => {
+    if (!window.confirm('Apagar todas as denúncias já processadas (aceites e rejeitadas)? Esta ação é irreversível.')) return
+    setBusy(true)
+    try {
+      await api('/admin/reports/clear', { method: 'POST', body: '{}' })
+      toast.success('Histórico de denúncias processadas apagado')
+      load()
+    } catch (e) { toast.error(e.message) }
+    finally { setBusy(false) }
+  }
+
   return (
     <div>
       <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
         <h1 className="text-3xl font-bold text-white">Denúncias ({reports.filter(r => r.status === 'PENDENTE').length} pendentes)</h1>
-        <div className="flex gap-1">
-          {[['PENDENTE','Pendentes'],['ACEITE','Aceites'],['REJEITADA','Rejeitadas'],['all','Todas']].map(([k, l]) => (
-            <Button key={k} size="sm" variant={filter === k ? 'default' : 'outline'} onClick={() => setFilter(k)} className={filter === k ? 'bg-purple-600' : 'border-zinc-700 text-zinc-300'}>{l}</Button>
-          ))}
+        <div className="flex gap-2 flex-wrap">
+          <div className="flex gap-1">
+            {[['PENDENTE','Pendentes'],['ACEITE','Aceites'],['REJEITADA','Rejeitadas'],['all','Todas']].map(([k, l]) => (
+              <Button key={k} size="sm" variant={filter === k ? 'default' : 'outline'} onClick={() => setFilter(k)} className={filter === k ? 'bg-purple-600' : 'border-zinc-700 text-zinc-300'}>{l}</Button>
+            ))}
+          </div>
+          <Button size="sm" variant="outline" onClick={clearHistory} disabled={busy} className="border-red-500/40 text-red-300 hover:bg-red-500/10">
+            🗑️ Limpar Histórico
+          </Button>
         </div>
       </div>
       <div className="space-y-4">
@@ -891,6 +907,17 @@ function MbwayTopupsSection() {
     } catch (e) { toast.error(e.message) } finally { setBusy(false) }
   }
 
+  const clearMbwayHistory = async () => {
+    if (!window.confirm('Apagar todos os comprovativos MB WAY já processados (confirmados e rejeitados)? Esta ação é irreversível.')) return
+    setBusy(true)
+    try {
+      await api('/admin/mbway-topups/clear', { method: 'POST', body: '{}' })
+      toast.success('Histórico de comprovativos MB WAY apagado')
+      load()
+    } catch (e) { toast.error(e.message) }
+    finally { setBusy(false) }
+  }
+
   const MBWAY_STATUS_COLORS = {
     PENDENTE: 'bg-yellow-500/15 text-yellow-300 border-yellow-500/40',
     CONFIRMADO: 'bg-green-500/15 text-green-300 border-green-500/40',
@@ -901,10 +928,15 @@ function MbwayTopupsSection() {
     <div>
       <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
         <h1 className="text-3xl font-bold text-white">Carregamentos MB WAY ({list.length})</h1>
-        <div className="flex gap-1 flex-wrap">
-          {[['PENDENTE','Pendentes'],['CONFIRMADO','Confirmados'],['REJEITADO','Rejeitados'],['all','Todos']].map(([k, l]) => (
-            <Button key={k} size="sm" variant={filter === k ? 'default' : 'outline'} onClick={() => setFilter(k)} className={filter === k ? 'bg-purple-600' : 'border-zinc-700 text-zinc-300'}>{l}</Button>
-          ))}
+        <div className="flex gap-2 flex-wrap">
+          <div className="flex gap-1 flex-wrap">
+            {[['PENDENTE','Pendentes'],['CONFIRMADO','Confirmados'],['REJEITADO','Rejeitados'],['all','Todos']].map(([k, l]) => (
+              <Button key={k} size="sm" variant={filter === k ? 'default' : 'outline'} onClick={() => setFilter(k)} className={filter === k ? 'bg-purple-600' : 'border-zinc-700 text-zinc-300'}>{l}</Button>
+            ))}
+          </div>
+          <Button size="sm" variant="outline" onClick={clearMbwayHistory} disabled={busy} className="border-red-500/40 text-red-300 hover:bg-red-500/10">
+            🗑️ Limpar Histórico
+          </Button>
         </div>
       </div>
 

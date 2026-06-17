@@ -905,6 +905,18 @@ async function handleRoute(request, { params }) {
         }
       }
 
+      if (route === '/admin/reports/clear' && method === 'POST') {
+        await db.collection('reports').deleteMany({ status: { $in: ['ACEITE', 'REJEITADA'] } })
+        await logAudit(db, admin, 'reports_cleared', 'reports', null, 'all processed reports deleted')
+        return J({ ok: true })
+      }
+
+      if (route === '/admin/mbway-topups/clear' && method === 'POST') {
+        await db.collection('mbway_topups').deleteMany({ status: { $in: ['CONFIRMADO', 'REJEITADO'] } })
+        await logAudit(db, admin, 'mbway_topups_cleared', 'mbway_topups', null, 'all processed topups deleted')
+        return J({ ok: true })
+      }
+
       if (route === '/admin/audit-log' && method === 'GET') {
         const list = await db.collection('audit_log').find({}).sort({ createdAt: -1 }).limit(200).toArray()
         return J({ log: list.map(clean) })
