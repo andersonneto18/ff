@@ -900,7 +900,7 @@ function RoomDetail({ roomId, me, onBack, refreshMe }) {
                 {room.winnerId === creator?.id ? creator?.ffNickname : opponent?.ffNickname}
               </div>
               <div className="text-green-300 mt-2">Prémio: {fmt(room.prizeCents)}</div>
-              {isParticipant && room.winnerId !== me?.id && (
+              {isParticipant && (room.loserId === me?.id || (room.winnerId && room.winnerId !== me?.id)) && (
                 <div className="mt-4 pt-4 border-t border-red-500/30">
                   <p className="text-sm text-muted-foreground mb-3">Achas que houve trapaça? Tens 24h para denunciar com provas.</p>
                   <Button onClick={() => setReportOpen(true)} variant="outline" className="border-red-500/50 text-red-300 hover:bg-red-500/10">
@@ -923,10 +923,11 @@ function RoomDetail({ roomId, me, onBack, refreshMe }) {
             </div>
           )}
           {room.status === 'EM_DISPUTA' && (
-            <div className="glow-card p-5 rounded-xl text-center border border-red-500/40">
+            <div className="glow-card p-5 rounded-xl text-center border border-red-500/40 space-y-2">
               <AlertTriangle className="w-8 h-8 mx-auto text-red-300 mb-2" />
               <div className="font-bold text-red-300">EM DISPUTA</div>
-              <div className="text-sm text-muted-foreground mt-1">A aguardar decisão da moderação.</div>
+              <div className="text-sm text-muted-foreground">A tua denúncia foi recebida e está a ser analisada pela equipa.</div>
+              <div className="text-xs text-zinc-500">O resultado ficará suspenso até decisão da moderação.</div>
             </div>
           )}
         </div>
