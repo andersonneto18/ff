@@ -1024,7 +1024,7 @@ async function handleRoute(request, { params }) {
         if (!name?.trim()) return ERR('Nome obrigatório')
         const fee = Math.round(parseFloat(entryFeeEuros || 0) * 100)
         const max = parseInt(maxPlayers) || 8
-        if (![4, 8, 16].includes(max)) return ERR('Máximo de jogadores deve ser 4, 8 ou 16')
+        if (max < 2 || max > 64) return ERR('Máximo de jogadores deve ser entre 2 e 64')
         const t = { id: uuidv4(), name: name.trim(), description: description?.trim() || '', entryFeeCents: fee, maxPlayers: max, currentPlayers: 0, status: 'RASCUNHO', currentRound: 0, winnerId: null, prizeFirstCents: null, prizeSecondCents: null, commissionCents: null, createdAt: new Date(), startedAt: null, finishedAt: null }
         await db.collection('tournaments').insertOne(t)
         await logAudit(db, admin, 'tournament_created', 'tournament', t.id, name)
@@ -1061,11 +1061,7 @@ async function handleRoute(request, { params }) {
           const prizeFirst = Math.round((totalPot - commission) * 0.875)
           const prizeSecond = totalPot - commission - prizeFirst
           await db.collection('tournaments').updateOne({ id: tId }, { $set: { status: 'EM_ANDAMENTO', currentRound: 1, startedAt: new Date(), prizeFirstCents: prizeFirst, prizeSecondCents: prizeSecond, commissionCents: commission } })
-          // Generate round 1 matches
-          for (let i = 0; i < shuffled.length - 1; i += 2) {
-            await db.collection('tournament_matches').insertOne({ id: uuidv4(), tournamentId: tId, round: 1, player1Id: shuffled[i].userId, player2Id: shuffled[i+1].userId, claim1: null, claim2: null, winnerId: null, status: 'PENDENTE', createdAt: new Date(), finishedAt: null })
-          }
-          // Notify participants
+          await generateRoundMatches(db, tId, shuffled.map(p => p.userId), 1, tournament.name)
           for (const p of shuffled) await createNotification(db, p.userId, 'tournament', '🏆 Torneio iniciado!', `O torneio "${tournament.name}" começou! Verifica o teu duelo na tab Torneios.`)
           await logAudit(db, admin, 'tournament_started', 'tournament', tId, '')
           return J({ ok: true })
@@ -1274,41 +1270,56 @@ async function handleRoute(request, { params }) {
   }
 }
 
+async function generateRoundMatches(db, tournamentId, playerIds, round, tournamentName) {
+  for (let i = 0; i + 1 < playerIds.length; i += 2) {
+    await db.collection('tournament_matches').insertOne({ id: uuidv4(), tournamentId, round, player1Id: playerIds[i], player2Id: playerIds[i + 1], claim1: null, claim2: null, winnerId: null, status: 'PENDENTE', createdAt: new Date(), finishedAt: null })
+  }
+  // Bye for odd player — advances automatically
+  if (playerIds.length % 2 === 1) {
+    const byePlayer = playerIds[playerIds.length - 1]
+    await db.collection('tournament_matches').insertOne({ id: uuidv4(), tournamentId, round, player1Id: byePlayer, player2Id: 'BYE', claim1: null, claim2: null, winnerId: byePlayer, status: 'BYE', createdAt: new Date(), finishedAt: new Date() })
+    await createNotification(db, byePlayer, 'tournament', '⚡ Avanças automaticamente!', `Na ronda ${round} do torneio "${tournamentName}" não tinhas adversário — avançaste sem jogar!`)
+  }
+}
+
 async function finalizeTournamentMatch(db, tournament, match, winnerId) {
-  const loserId = winnerId === match.player1Id ? match.player2Id : match.player1Id
+  const loserId = match.player2Id === 'BYE' ? null : (winnerId === match.player1Id ? match.player2Id : match.player1Id)
   await db.collection('tournament_matches').updateOne({ id: match.id }, { $set: { status: 'FINALIZADA', winnerId, finishedAt: new Date() } })
-  await db.collection('tournament_participants').updateOne({ tournamentId: tournament.id, userId: loserId }, { $set: { eliminatedRound: match.round } })
+  if (loserId) await db.collection('tournament_participants').updateOne({ tournamentId: tournament.id, userId: loserId }, { $set: { eliminatedRound: match.round } })
+
   const tFresh = await db.collection('tournaments').findOne({ id: tournament.id })
   const roundMatches = await db.collection('tournament_matches').find({ tournamentId: tournament.id, round: match.round }).toArray()
-  const allDone = roundMatches.every(m => m.status === 'FINALIZADA' || m.id === match.id)
+  const allDone = roundMatches.every(m => ['FINALIZADA', 'BYE'].includes(m.status) || m.id === match.id)
   if (!allDone) return
-  const winners = roundMatches.map(m => m.id === match.id ? winnerId : m.winnerId)
+
+  const winners = roundMatches.map(m => m.id === match.id ? winnerId : m.winnerId).filter(Boolean)
+
   if (winners.length === 1) {
-    // Tournament over
+    // Tournament over — distribute prizes
     const prize1 = tFresh.prizeFirstCents || 0
     const prize2 = tFresh.prizeSecondCents || 0
     const finalWinner = winners[0]
     const finalLoser = loserId
     const wu = await db.collection('users').findOne({ id: finalWinner })
-    await db.collection('users').updateOne({ id: finalWinner }, { $set: { balanceCents: (wu?.balanceCents || 0) + prize1 }, $inc: { totalEarningsCents: prize1 } })
-    await db.collection('transactions').insertOne({ id: uuidv4(), userId: finalWinner, type: 'tournament_prize', amountCents: prize1, balance: (wu?.balanceCents || 0) + prize1, description: `1º lugar torneio: ${tFresh.name}`, createdAt: new Date() })
-    if (prize2 > 0) {
+    const nb1 = (wu?.balanceCents || 0) + prize1
+    await db.collection('users').updateOne({ id: finalWinner }, { $set: { balanceCents: nb1 }, $inc: { totalEarningsCents: prize1 } })
+    await db.collection('transactions').insertOne({ id: uuidv4(), userId: finalWinner, type: 'tournament_prize', amountCents: prize1, balance: nb1, description: `1º lugar torneio: ${tFresh.name}`, createdAt: new Date() })
+    if (prize2 > 0 && finalLoser) {
       const lu = await db.collection('users').findOne({ id: finalLoser })
-      await db.collection('users').updateOne({ id: finalLoser }, { $set: { balanceCents: (lu?.balanceCents || 0) + prize2 }, $inc: { totalEarningsCents: prize2 } })
-      await db.collection('transactions').insertOne({ id: uuidv4(), userId: finalLoser, type: 'tournament_prize', amountCents: prize2, balance: (lu?.balanceCents || 0) + prize2, description: `2º lugar torneio: ${tFresh.name}`, createdAt: new Date() })
+      const nb2 = (lu?.balanceCents || 0) + prize2
+      await db.collection('users').updateOne({ id: finalLoser }, { $set: { balanceCents: nb2 }, $inc: { totalEarningsCents: prize2 } })
+      await db.collection('transactions').insertOne({ id: uuidv4(), userId: finalLoser, type: 'tournament_prize', amountCents: prize2, balance: nb2, description: `2º lugar torneio: ${tFresh.name}`, createdAt: new Date() })
+      await createNotification(db, finalLoser, 'tournament', '🥈 2º lugar!', `Ficaste em 2º lugar no torneio "${tFresh.name}" e recebeste ${(prize2/100).toFixed(2)}€!`)
     }
     await db.collection('tournaments').updateOne({ id: tournament.id }, { $set: { status: 'FINALIZADO', winnerId: finalWinner, finishedAt: new Date() } })
     await createNotification(db, finalWinner, 'tournament', '🏆 Campeão!', `Parabéns! Ganhaste o torneio "${tFresh.name}" e recebeste ${(prize1/100).toFixed(2)}€!`)
-    if (prize2 > 0) await createNotification(db, finalLoser, 'tournament', '🥈 2º lugar!', `Ficaste em 2º lugar no torneio "${tFresh.name}" e recebeste ${(prize2/100).toFixed(2)}€!`)
   } else {
-    // Generate next round
+    // Generate next round (with automatic bye if odd number of winners)
     const nextRound = match.round + 1
     await db.collection('tournaments').updateOne({ id: tournament.id }, { $set: { currentRound: nextRound } })
-    for (let i = 0; i < winners.length - 1; i += 2) {
-      await db.collection('tournament_matches').insertOne({ id: uuidv4(), tournamentId: tournament.id, round: nextRound, player1Id: winners[i], player2Id: winners[i+1], claim1: null, claim2: null, winnerId: null, status: 'PENDENTE', createdAt: new Date(), finishedAt: null })
-    }
-    const parts = await db.collection('tournament_participants').find({ tournamentId: tournament.id, eliminatedRound: null }).toArray()
-    for (const p of parts) await createNotification(db, p.userId, 'tournament', `🏆 Ronda ${nextRound}`, `A ronda ${nextRound} do torneio "${tFresh.name}" começou! Verifica o teu duelo.`)
+    await generateRoundMatches(db, tournament.id, winners, nextRound, tFresh.name)
+    const activeParts = await db.collection('tournament_participants').find({ tournamentId: tournament.id, eliminatedRound: null }).toArray()
+    for (const p of activeParts) await createNotification(db, p.userId, 'tournament', `🏆 Ronda ${nextRound}`, `A ronda ${nextRound} do torneio "${tFresh.name}" começou! Verifica o teu duelo.`)
   }
 }
 

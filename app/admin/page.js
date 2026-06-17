@@ -1165,7 +1165,7 @@ function TournamentsSection() {
               <div><Label className="text-zinc-300">Entrada (€)</Label><input type="number" min="0" step="0.50" value={form.entryFeeEuros} onChange={e => setForm({...form, entryFeeEuros: e.target.value})} className="w-full mt-1 bg-zinc-800 border border-zinc-700 text-white rounded-md px-3 py-2 text-sm focus:outline-none focus:border-purple-500" /></div>
               <div><Label className="text-zinc-300">Máx. Jogadores</Label>
                 <select value={form.maxPlayers} onChange={e => setForm({...form, maxPlayers: e.target.value})} className="w-full mt-1 bg-zinc-800 border border-zinc-700 text-white rounded-md px-3 py-2 text-sm focus:outline-none focus:border-purple-500">
-                  <option value="4">4 jogadores</option><option value="8">8 jogadores</option><option value="16">16 jogadores</option>
+                  {[4,5,6,7,8,10,12,16,32].map(n => <option key={n} value={n}>{n} jogadores</option>)}
                 </select>
               </div>
               <div><Label className="text-zinc-300">Descrição</Label><input value={form.description} onChange={e => setForm({...form, description: e.target.value})} placeholder="Modo, regras..." className="w-full mt-1 bg-zinc-800 border border-zinc-700 text-white rounded-md px-3 py-2 text-sm focus:outline-none focus:border-purple-500" /></div>
