@@ -1073,10 +1073,19 @@ function WalletView({ refreshMe, stripeEnabled }) {
   const handleProofFile = async (e) => {
     const file = e.target.files?.[0]
     if (!file) return
-    if (!file.type.startsWith('image/')) { toast.error('Seleciona uma imagem'); return }
+    const isImage = file.type.startsWith('image/')
+    const isPdf = file.type === 'application/pdf'
+    if (!isImage && !isPdf) { toast.error('Formato não suportado. Usa imagem ou PDF'); return }
     setBusy(true)
-    try { setMbwayProof(await compressImage(file)) }
-    catch (e) { toast.error('Erro ao processar imagem') }
+    try {
+      if (isImage) {
+        setMbwayProof(await compressImage(file))
+      } else {
+        const reader = new FileReader()
+        reader.onload = (ev) => setMbwayProof(ev.target.result)
+        reader.readAsDataURL(file)
+      }
+    } catch (e) { toast.error('Erro ao processar ficheiro') }
     finally { setBusy(false) }
   }
 
@@ -1293,14 +1302,16 @@ function WalletView({ refreshMe, stripeEnabled }) {
                 {mbwayPhone && (
                   <>
                     <div>
-                      <Label className="text-zinc-300">Comprovativo de pagamento (foto/screenshot)</Label>
+                      <Label className="text-zinc-300">Comprovativo de pagamento (foto, screenshot ou PDF)</Label>
                       <label className="mt-1.5 flex items-center gap-2 cursor-pointer border border-dashed border-zinc-600 hover:border-blue-500 rounded-lg p-3 transition">
                         <ImageIcon className="w-4 h-4 text-zinc-400" />
                         <span className="text-sm text-zinc-400">{mbwayProof ? 'Imagem selecionada ✓' : 'Selecionar foto do comprovativo'}</span>
-                        <input type="file" accept="image/*" className="hidden" onChange={handleProofFile} />
+                        <input type="file" accept="image/*,application/pdf" className="hidden" onChange={handleProofFile} />
                       </label>
                       {mbwayProof && (
-                        <img src={mbwayProof} alt="Comprovativo" className="mt-2 w-full max-h-48 object-contain rounded border border-zinc-700" />
+                        mbwayProof.startsWith('data:application/pdf')
+                          ? <div className="mt-2 flex items-center gap-2 bg-zinc-800 rounded p-2 text-sm text-zinc-300"><span>📄</span> PDF selecionado</div>
+                          : <img src={mbwayProof} alt="Comprovativo" className="mt-2 w-full max-h-48 object-contain rounded border border-zinc-700" />
                       )}
                     </div>
                     <Button onClick={submitMbwayTopup} disabled={busy || !mbwayProof || !parseFloat(topupAmount)} className="w-full bg-blue-600 hover:bg-blue-700 h-11 font-bold">
