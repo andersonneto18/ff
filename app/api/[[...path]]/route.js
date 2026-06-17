@@ -650,7 +650,14 @@ async function handleRoute(request, { params }) {
 
     // ===== TOURNAMENTS =====
     if (route === '/tournaments' && method === 'GET') {
+      const user = await getUserFromRequest(request)
       const list = await db.collection('tournaments').find({ status: { $in: ['ABERTO', 'EM_ANDAMENTO'] } }).sort({ createdAt: -1 }).limit(20).toArray()
+      if (user) {
+        const tIds = list.map(t => t.id)
+        const joined = tIds.length ? await db.collection('tournament_participants').find({ tournamentId: { $in: tIds }, userId: user.id }).toArray() : []
+        const joinedSet = new Set(joined.map(j => j.tournamentId))
+        return J({ tournaments: list.map(t => ({ ...clean(t), isJoined: joinedSet.has(t.id) })) })
+      }
       return J({ tournaments: list.map(clean) })
     }
 
@@ -686,6 +693,24 @@ async function handleRoute(request, { params }) {
         if (fee > 0) await db.collection('transactions').insertOne({ id: uuidv4(), userId: user.id, type: 'tournament_entry', amountCents: -fee, balance: newBalance, description: `Inscrição torneio: ${tournament.name}`, createdAt: new Date() })
         await createNotification(db, user.id, 'tournament', '🏆 Inscrição confirmada', `Estás inscrito no torneio "${tournament.name}". Aguarda o início!`)
         return J({ ok: true, balanceCents: newBalance })
+      }
+
+      if (tAction === 'leave' && method === 'POST') {
+        const user = await getUserFromRequest(request)
+        if (!user) return ERR('Não autenticado', 401)
+        if (tournament.status !== 'ABERTO') return ERR('Só podes sair antes do torneio começar')
+        const participant = await db.collection('tournament_participants').findOne({ tournamentId: tId, userId: user.id })
+        if (!participant) return ERR('Não estás inscrito neste torneio')
+        await db.collection('tournament_participants').deleteOne({ id: participant.id })
+        await db.collection('tournaments').updateOne({ id: tId }, { $inc: { currentPlayers: -1 } })
+        const fee = tournament.entryFeeCents || 0
+        if (fee > 0) {
+          const newBalance = (user.balanceCents || 0) + fee
+          await db.collection('users').updateOne({ id: user.id }, { $set: { balanceCents: newBalance } })
+          await db.collection('transactions').insertOne({ id: uuidv4(), userId: user.id, type: 'tournament_refund', amountCents: fee, balance: newBalance, description: `Saída do torneio: ${tournament.name}`, createdAt: new Date() })
+          await createNotification(db, user.id, 'tournament', 'Saíste do torneio', `A tua inscrição no torneio "${tournament.name}" foi cancelada. Os ${(fee/100).toFixed(2)}€ foram devolvidos ao teu saldo.`)
+        }
+        return J({ ok: true })
       }
 
       const matchReportMatch = tAction?.match(/^match\/([^\/]+)\/report$/)

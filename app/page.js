@@ -1567,6 +1567,16 @@ function TournamentsView({ me }) {
     } catch (e) { toast.error(e.message) } finally { setBusy(false) }
   }
 
+  const leave = async (t) => {
+    if (!confirm(`Sair do torneio "${t.name}"?${t.entryFeeCents > 0 ? ` Os ${(t.entryFeeCents/100).toFixed(2)}€ serão devolvidos ao teu saldo.` : ''}`)) return
+    setBusy(true)
+    try {
+      await api(`/tournaments/${t.id}/leave`, { method: 'POST', body: '{}' })
+      toast.success('Saíste do torneio. Saldo reembolsado.')
+      load(); if (selected === t.id) loadDetails(t.id)
+    } catch (e) { toast.error(e.message) } finally { setBusy(false) }
+  }
+
   const claim = async (tId, matchId, result) => {
     setBusy(true)
     try {
@@ -1618,7 +1628,7 @@ function TournamentsView({ me }) {
       <div className="space-y-4">
         {list.map(t => {
           const st = STATUS_LABEL[t.status] || { l: t.status, cls: '' }
-          const isJoined = details?.participants?.some(p => p.userId === me?.id)
+          const isJoined = t.isJoined || (selected === t.id && details?.participants?.some(p => p.userId === me?.id))
           const totalPot = (t.entryFeeCents * t.maxPlayers) / 100
           const prize1 = (totalPot * 0.8 * 0.875).toFixed(2)
           const prize2 = (totalPot * 0.8 * 0.125).toFixed(2)
@@ -1664,7 +1674,14 @@ function TournamentsView({ me }) {
                     <Trophy className="w-4 h-4 mr-2" /> Inscrever {t.entryFeeCents > 0 ? `(${(t.entryFeeCents/100).toFixed(2)}€)` : '(Grátis)'}
                   </Button>
                 )}
-                {isJoined && t.status === 'ABERTO' && <Badge className="bg-green-500/20 text-green-300">✓ Inscrito — aguarda o início</Badge>}
+                {isJoined && t.status === 'ABERTO' && (
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <Badge className="bg-green-500/20 text-green-300">✓ Inscrito — aguarda o início</Badge>
+                    <Button variant="outline" size="sm" disabled={busy} onClick={() => leave(t)} className="border-red-500/40 text-red-400 hover:bg-red-500/10 h-7 text-xs">
+                      Sair do Torneio
+                    </Button>
+                  </div>
+                )}
                 {(t.mode || t.server || t.weapons || t.platform || t.rules) && (
                   <Button variant="outline" size="sm" onClick={() => setRulesModal(t)} className="border-purple-500/40">
                     📋 Ver Regras
