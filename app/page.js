@@ -1545,6 +1545,7 @@ function TournamentsView({ me }) {
   const [busy, setBusy] = useState(false)
   const [reportMatchId, setReportMatchId] = useState(null)
   const [reportForm, setReportForm] = useState({ reason: '', files: [] })
+  const [rulesModal, setRulesModal] = useState(null)
 
   const load = useCallback(async () => {
     try { const d = await api('/tournaments'); setList(d.tournaments || []) } catch (e) {}
@@ -1584,6 +1585,34 @@ function TournamentsView({ me }) {
     <div className="space-y-6">
       <div><h1 className="text-3xl font-black gradient-text">Torneios</h1><p className="text-sm text-muted-foreground">Inscreve-te, elimina os adversários e leva o prémio</p></div>
 
+      {/* Rules modal */}
+      {rulesModal && (
+        <Dialog open={!!rulesModal} onOpenChange={() => setRulesModal(null)}>
+          <DialogContent className="bg-card border-purple-500/30 w-[calc(100vw-2rem)] sm:max-w-md">
+            <DialogHeader><DialogTitle>📋 Regras da Partida</DialogTitle></DialogHeader>
+            <div className="space-y-3">
+              {(rulesModal.mode || rulesModal.server || rulesModal.weapons || rulesModal.platform) && (
+                <div className="bg-zinc-800/60 rounded-lg p-3 space-y-1.5 text-sm">
+                  {rulesModal.mode    && <div className="flex gap-2"><span className="text-purple-300 shrink-0">🎮 Modo</span><span className="text-white font-medium">{rulesModal.mode}</span></div>}
+                  {rulesModal.server  && <div className="flex gap-2"><span className="text-purple-300 shrink-0">🌐 Servidor</span><span className="text-white font-medium">{rulesModal.server}</span></div>}
+                  {rulesModal.weapons && <div className="flex gap-2"><span className="text-purple-300 shrink-0">🔫 Armas</span><span className="text-white font-medium">{rulesModal.weapons}</span></div>}
+                  {rulesModal.platform && <div className="flex gap-2"><span className="text-purple-300 shrink-0">📱 Plataforma</span><span className="text-white font-medium">{rulesModal.platform}</span></div>}
+                </div>
+              )}
+              {rulesModal.rules && (
+                <div className="bg-zinc-800/60 rounded-lg p-3">
+                  <div className="text-xs text-purple-300 font-bold mb-1.5 uppercase tracking-wider">Regras adicionais</div>
+                  <p className="text-sm text-zinc-200 whitespace-pre-wrap">{rulesModal.rules}</p>
+                </div>
+              )}
+              {!rulesModal.mode && !rulesModal.server && !rulesModal.weapons && !rulesModal.platform && !rulesModal.rules && (
+                <p className="text-muted-foreground text-sm text-center py-4">Sem regras definidas para este torneio.</p>
+              )}
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
+
       {list.length === 0 && <Card className="glow-card p-8 text-center text-muted-foreground">Sem torneios disponíveis de momento. Volta mais tarde!</Card>}
 
       <div className="space-y-4">
@@ -1603,14 +1632,6 @@ function TournamentsView({ me }) {
                     <Badge variant="outline" className={`${st.cls} border-0 text-xs`}>{st.l}</Badge>
                   </div>
                   {t.description && <p className="text-sm text-muted-foreground mt-0.5">{t.description}</p>}
-                  {(t.mode || t.server || t.weapons || t.platform) && (
-                    <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1 text-xs text-muted-foreground">
-                      {t.mode && <span><span className="text-purple-300">🎮</span> {t.mode}</span>}
-                      {t.server && <span><span className="text-purple-300">🌐</span> {t.server}</span>}
-                      {t.weapons && <span><span className="text-purple-300">🔫</span> {t.weapons}</span>}
-                      {t.platform && <span><span className="text-purple-300">📱</span> {t.platform}</span>}
-                    </div>
-                  )}
                 </div>
                 <div className="text-right shrink-0">
                   <div className="text-2xl font-black text-yellow-300">{t.entryFeeCents > 0 ? `${(t.entryFeeCents/100).toFixed(2)}€` : 'GRÁTIS'}</div>
@@ -1618,11 +1639,24 @@ function TournamentsView({ me }) {
                 </div>
               </div>
 
-              <div className="grid grid-cols-3 gap-2 mb-4 text-center">
+              <div className="grid grid-cols-3 gap-2 mb-3 text-center">
                 <div className="glow-card rounded-lg p-2"><div className="text-xs text-muted-foreground">Jogadores</div><div className="font-bold">{t.currentPlayers}/{t.maxPlayers}</div></div>
                 <div className="glow-card rounded-lg p-2"><div className="text-xs text-muted-foreground">1º Lugar</div><div className="font-bold text-yellow-300">{prize1}€</div></div>
                 <div className="glow-card rounded-lg p-2"><div className="text-xs text-muted-foreground">2º Lugar</div><div className="font-bold text-zinc-300">{prize2}€</div></div>
               </div>
+
+              {(t.mode || t.server || t.weapons || t.platform || t.rules) && (
+                <div className="bg-zinc-800/50 border border-zinc-700/60 rounded-lg p-3 mb-3">
+                  <div className="text-xs font-bold text-purple-300 uppercase tracking-wider mb-2">📋 Regras da Partida</div>
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+                    {t.mode     && <div><span className="text-zinc-400">🎮 Modo</span> <span className="text-white font-medium">{t.mode}</span></div>}
+                    {t.server   && <div><span className="text-zinc-400">🌐 Servidor</span> <span className="text-white font-medium">{t.server}</span></div>}
+                    {t.weapons  && <div><span className="text-zinc-400">🔫 Armas</span> <span className="text-white font-medium">{t.weapons}</span></div>}
+                    {t.platform && <div><span className="text-zinc-400">📱 Plataforma</span> <span className="text-white font-medium">{t.platform}</span></div>}
+                  </div>
+                  {t.rules && <p className="text-xs text-zinc-300 mt-2 pt-2 border-t border-zinc-700/60 whitespace-pre-wrap">{t.rules}</p>}
+                </div>
+              )}
 
               <div className="flex gap-2 flex-wrap">
                 {t.status === 'ABERTO' && !isJoined && (
@@ -1631,6 +1665,11 @@ function TournamentsView({ me }) {
                   </Button>
                 )}
                 {isJoined && t.status === 'ABERTO' && <Badge className="bg-green-500/20 text-green-300">✓ Inscrito — aguarda o início</Badge>}
+                {(t.mode || t.server || t.weapons || t.platform || t.rules) && (
+                  <Button variant="outline" size="sm" onClick={() => setRulesModal(t)} className="border-purple-500/40">
+                    📋 Ver Regras
+                  </Button>
+                )}
                 <Button variant="outline" size="sm" onClick={() => { setSelected(selected === t.id ? null : t.id); if (selected !== t.id) loadDetails(t.id) }} className="border-purple-500/40">
                   {selected === t.id ? 'Fechar' : 'Ver bracket'}
                 </Button>

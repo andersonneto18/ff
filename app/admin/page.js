@@ -1127,7 +1127,7 @@ function MbwayTopupsSection() {
 function TournamentsSection() {
   const [list, setList] = useState([])
   const [creating, setCreating] = useState(false)
-  const [form, setForm] = useState({ name: '', description: '', entryFeeEuros: '5', maxPlayers: '8', mode: '', server: '', weapons: '', platform: 'Misto' })
+  const [form, setForm] = useState({ name: '', description: '', entryFeeEuros: '5', maxPlayers: '8', mode: '', server: '', weapons: '', platform: 'Misto', rules: '' })
   const [busy, setBusy] = useState(false)
   const [selected, setSelected] = useState(null)
   const [details, setDetails] = useState(null)
@@ -1148,7 +1148,7 @@ function TournamentsSection() {
     e.preventDefault(); setBusy(true)
     try {
       await api('/admin/tournaments', { method: 'POST', body: JSON.stringify(form) })
-      toast.success('Torneio criado'); setCreating(false); setForm({ name: '', description: '', entryFeeEuros: '5', maxPlayers: '8', mode: '', server: '', weapons: '', platform: 'Misto' }); load()
+      toast.success('Torneio criado'); setCreating(false); setForm({ name: '', description: '', entryFeeEuros: '5', maxPlayers: '8', mode: '', server: '', weapons: '', platform: 'Misto', rules: '' }); load()
     } catch (err) { toast.error(err.message) } finally { setBusy(false) }
   }
 
@@ -1204,6 +1204,10 @@ function TournamentsSection() {
                 <select value={form.platform} onChange={e => setForm({...form, platform: e.target.value})} className="w-full mt-1 bg-zinc-800 border border-zinc-700 text-white rounded-md px-3 py-2 text-sm focus:outline-none focus:border-purple-500">
                   {['Mobile','Emulador','Mobilador','Misto'].map(v => <option key={v} value={v}>{v}</option>)}
                 </select>
+              </div>
+              <div className="sm:col-span-2">
+                <Label className="text-zinc-300">📋 Regras da Partida</Label>
+                <textarea value={form.rules} onChange={e => setForm({...form, rules: e.target.value})} rows={4} placeholder="ex: Sem usar personagens pagos, proibido usar granadas, Kill cam obrigatória para provar vitória..." className="w-full mt-1 bg-zinc-800 border border-zinc-700 text-white rounded-md px-3 py-2 text-sm focus:outline-none focus:border-purple-500 resize-none" />
               </div>
             </div>
             {form.entryFeeEuros > 0 && (
