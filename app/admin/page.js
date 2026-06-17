@@ -1127,7 +1127,7 @@ function MbwayTopupsSection() {
 function TournamentsSection() {
   const [list, setList] = useState([])
   const [creating, setCreating] = useState(false)
-  const [form, setForm] = useState({ name: '', description: '', entryFeeEuros: '5', maxPlayers: '8', mode: '', server: '', weapons: '', platform: 'Misto', rules: '', characters: '' })
+  const [form, setForm] = useState({ name: '', description: '', entryFeeEuros: '5', maxPlayers: '8', mode: '', server: '', weapons: '', platform: 'Misto', rules: '', characters: '', pets: '' })
   const [busy, setBusy] = useState(false)
   const [selected, setSelected] = useState(null)
   const [details, setDetails] = useState(null)
@@ -1148,7 +1148,7 @@ function TournamentsSection() {
     e.preventDefault(); setBusy(true)
     try {
       await api('/admin/tournaments', { method: 'POST', body: JSON.stringify(form) })
-      toast.success('Torneio criado'); setCreating(false); setForm({ name: '', description: '', entryFeeEuros: '5', maxPlayers: '8', mode: '', server: '', weapons: '', platform: 'Misto', rules: '', characters: '' }); load()
+      toast.success('Torneio criado'); setCreating(false); setForm({ name: '', description: '', entryFeeEuros: '5', maxPlayers: '8', mode: '', server: '', weapons: '', platform: 'Misto', rules: '', characters: '', pets: '' }); load()
     } catch (err) { toast.error(err.message) } finally { setBusy(false) }
   }
 
@@ -1208,6 +1208,10 @@ function TournamentsSection() {
               <div className="sm:col-span-2">
                 <Label className="text-zinc-300">🧬 Habilidades de Personagens (opcional)</Label>
                 <textarea value={form.characters} onChange={e => setForm({...form, characters: e.target.value})} rows={2} placeholder="ex: Sem Chrono, K permitido, proibido Alok..." className="w-full mt-1 bg-zinc-800 border border-zinc-700 text-white rounded-md px-3 py-2 text-sm focus:outline-none focus:border-purple-500 resize-none" />
+              </div>
+              <div className="sm:col-span-2">
+                <Label className="text-zinc-300">🐾 Tipo de Pet (opcional)</Label>
+                <textarea value={form.pets} onChange={e => setForm({...form, pets: e.target.value})} rows={2} placeholder="ex: Sem pets, Falco permitido, proibido Beaston..." className="w-full mt-1 bg-zinc-800 border border-zinc-700 text-white rounded-md px-3 py-2 text-sm focus:outline-none focus:border-purple-500 resize-none" />
               </div>
               <div className="sm:col-span-2">
                 <Label className="text-zinc-300">📋 Regras da Partida</Label>
