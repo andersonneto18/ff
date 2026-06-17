@@ -854,7 +854,21 @@ function RoomDetail({ roomId, me, onBack, refreshMe }) {
             </Button>
           )}
           {room.status === 'ABERTA' && isCreator && (
-            <div className="text-center text-muted-foreground text-sm">A aguardar um adversário entrar...</div>
+            <div className="space-y-2">
+              <div className="text-center text-muted-foreground text-sm">A aguardar um adversário entrar...</div>
+              <Button variant="outline" disabled={busy} onClick={async () => {
+                if (!window.confirm('Cancelar sala? A tua aposta de ' + fmt(room.betAmountCents) + ' será devolvida ao saldo.')) return
+                setBusy(true)
+                try {
+                  await api('/rooms/' + room.id + '/cancel', { method: 'POST', body: '{}' })
+                  toast.success('Sala cancelada. ' + fmt(room.betAmountCents) + ' devolvidos ao teu saldo.')
+                  refreshMe?.()
+                  onBack()
+                } catch (e) { toast.error(e.message) } finally { setBusy(false) }
+              }} className="w-full border-red-500/30 text-red-400 hover:bg-red-500/10 text-sm">
+                <XCircle className="w-4 h-4 mr-2" /> Cancelar Sala e Receber Reembolso
+              </Button>
+            </div>
           )}
           {room.status === 'EMPARELHADA' && isCreator && (
             <Button onClick={startMatch} disabled={busy} className="w-full h-12 bg-gradient-to-r from-purple-600 to-blue-500 font-bold">

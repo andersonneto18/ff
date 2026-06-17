@@ -232,6 +232,13 @@ async function handleRoute(request, { params }) {
       const user = await getUserFromRequest(request)
       if (!user) return ERR('Não autenticado', 401)
 
+      if (action === 'cancel' && method === 'POST') {
+        if (room.creatorId !== user.id) return ERR('Só o criador pode cancelar a sala', 403)
+        if (room.status !== 'ABERTA') return ERR('Só podes cancelar uma sala que ainda está aberta (sem adversário)')
+        await refundRoom(db, room, 'creator_cancelled')
+        return J({ ok: true })
+      }
+
       if (action === 'start' && method === 'POST') {
         if (room.creatorId !== user.id) return ERR('Só o criador pode iniciar', 403)
         if (room.status !== 'EMPARELHADA') return ERR('Sala não está emparelhada')
