@@ -480,12 +480,17 @@ function ReportsSection() {
         {filtered.map(r => {
           const accused = r.reporter?.id === r.creator?.id ? r.opponent : r.creator
           return (
-            <Card key={r.id} className={`bg-zinc-900 border ${r.status === 'PENDENTE' ? 'border-red-500/40' : 'border-zinc-800'} p-5`}>
+            <Card key={r.id} className={`bg-zinc-900 border ${r.status === 'PENDENTE' ? (r.tournamentMatchId ? 'border-yellow-500/50' : 'border-red-500/40') : 'border-zinc-800'} p-5`}>
               <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
                 <div className="flex items-center gap-3">
                   <AlertTriangle className={`w-5 h-5 ${r.status === 'PENDENTE' ? 'text-red-400' : 'text-zinc-500'}`} />
                   <div>
-                    <div className="text-sm font-bold text-white">Sala #{r.roomId?.slice(0,8).toUpperCase()} — {fmt(r.room?.betAmountCents)}</div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {r.tournamentMatchId && <Badge className="bg-yellow-500/20 text-yellow-300 border border-yellow-500/40 text-[10px] font-black">🏆 TORNEIO</Badge>}
+                      <div className="text-sm font-bold text-white">
+                        {r.tournamentMatchId ? `Duelo de Torneio #${r.tournamentMatchId?.slice(0,8).toUpperCase()}` : `Sala #${r.roomId?.slice(0,8).toUpperCase()} — ${fmt(r.room?.betAmountCents)}`}
+                      </div>
+                    </div>
                     <div className="text-xs text-zinc-500">{new Date(r.createdAt).toLocaleString('pt-PT')}</div>
                   </div>
                 </div>

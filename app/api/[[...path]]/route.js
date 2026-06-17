@@ -681,6 +681,25 @@ async function handleRoute(request, { params }) {
         return J({ ok: true, balanceCents: newBalance })
       }
 
+      const matchReportMatch = tAction?.match(/^match\/([^\/]+)\/report$/)
+      if (matchReportMatch && method === 'POST') {
+        const user = await getUserFromRequest(request)
+        if (!user) return ERR('Não autenticado', 401)
+        const matchId = matchReportMatch[1]
+        const match = await db.collection('tournament_matches').findOne({ id: matchId, tournamentId: tId })
+        if (!match) return ERR('Partida não encontrada', 404)
+        if (match.player1Id !== user.id && match.player2Id !== user.id) return ERR('Não és participante', 403)
+        const { reason, videoData, screenshots } = await request.json()
+        const sc = Array.isArray(screenshots) ? screenshots.filter(Boolean).slice(0, 6) : []
+        await db.collection('reports').insertOne({
+          id: uuidv4(), roomId: null, tournamentId: tId, tournamentMatchId: matchId,
+          reporterId: user.id, reason: reason || '', videoData: videoData || null,
+          screenshots: sc, status: 'PENDENTE', createdAt: new Date(),
+        })
+        await db.collection('tournament_matches').updateOne({ id: matchId }, { $set: { status: 'EM_CONFLITO' } })
+        return J({ ok: true })
+      }
+
       const matchClaimMatch = tAction?.match(/^match\/([^\/]+)\/claim$/)
       if (matchClaimMatch && method === 'POST') {
         const user = await getUserFromRequest(request)

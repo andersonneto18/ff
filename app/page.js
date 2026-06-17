@@ -1529,6 +1529,8 @@ function TournamentsView({ me }) {
   const [selected, setSelected] = useState(null)
   const [details, setDetails] = useState(null)
   const [busy, setBusy] = useState(false)
+  const [reportMatchId, setReportMatchId] = useState(null)
+  const [reportForm, setReportForm] = useState({ reason: '', files: [] })
 
   const load = useCallback(async () => {
     try { const d = await api('/tournaments'); setList(d.tournaments || []) } catch (e) {}
@@ -1622,28 +1624,51 @@ function TournamentsView({ me }) {
                       const opp = details.umap?.[oppId]
                       const myClaim = active.player1Id === me?.id ? active.claim1 : active.claim2
                       return (
-                        <div className="bg-purple-500/10 border border-purple-500/30 rounded-xl p-4">
-                          <div className="font-bold text-purple-300 mb-2">⚔️ O teu duelo — Ronda {active.round}</div>
-                          <div className="flex items-center gap-3 mb-3">
-                            <Avatar className="w-10 h-10"><AvatarImage src={opp?.photoUrl} /><AvatarFallback>{opp?.ffNickname?.[0]}</AvatarFallback></Avatar>
-                            <div><div className="font-bold">{opp?.ffNickname}</div><div className="text-xs text-muted-foreground">{opp?.wins}V {opp?.losses}D</div></div>
+                        <div className="relative overflow-hidden rounded-2xl border-2 border-yellow-500/50 bg-gradient-to-b from-yellow-500/10 via-purple-900/20 to-zinc-900/80 p-5">
+                          {/* Tournament badge */}
+                          <div className="absolute top-3 right-3">
+                            <Badge className="bg-yellow-500/20 text-yellow-300 border border-yellow-500/40 text-[10px] font-black">🏆 TORNEIO</Badge>
+                          </div>
+                          <div className="flex items-center gap-2 mb-4">
+                            <Crown className="w-5 h-5 text-yellow-400" />
+                            <span className="font-black text-yellow-300">Ronda {active.round} — O teu duelo</span>
+                          </div>
+                          {/* VS card */}
+                          <div className="flex items-center justify-between gap-3 mb-4">
+                            <div className="flex-1 text-center">
+                              <Avatar className="w-14 h-14 mx-auto ring-2 ring-purple-500/60"><AvatarImage src={details.umap?.[me?.id]?.photoUrl} /><AvatarFallback>{details.umap?.[me?.id]?.ffNickname?.[0]}</AvatarFallback></Avatar>
+                              <div className="font-bold text-sm mt-1">{details.umap?.[me?.id]?.ffNickname || 'Tu'}</div>
+                              <div className="text-xs text-muted-foreground">{details.umap?.[me?.id]?.wins}V</div>
+                            </div>
+                            <div className="text-2xl font-black text-yellow-400">VS</div>
+                            <div className="flex-1 text-center">
+                              <Avatar className="w-14 h-14 mx-auto ring-2 ring-red-500/60"><AvatarImage src={opp?.photoUrl} /><AvatarFallback>{opp?.ffNickname?.[0]}</AvatarFallback></Avatar>
+                              <div className="font-bold text-sm mt-1">{opp?.ffNickname || '?'}</div>
+                              <div className="text-xs text-muted-foreground">{opp?.wins}V</div>
+                            </div>
                           </div>
                           {!myClaim ? (
-                            <div className="grid grid-cols-2 gap-2">
-                              <Button onClick={() => claim(t.id, active.id, 'win')} disabled={busy} className="bg-green-600 hover:bg-green-700 font-bold"><Trophy className="w-4 h-4 mr-1" /> Eu Ganhei</Button>
-                              <Button onClick={() => claim(t.id, active.id, 'loss')} disabled={busy} variant="destructive" className="font-bold"><XCircle className="w-4 h-4 mr-1" /> Eu Perdi</Button>
+                            <div className="space-y-2">
+                              <div className="grid grid-cols-2 gap-2">
+                                <Button onClick={() => claim(t.id, active.id, 'win')} disabled={busy} className="h-12 bg-green-600 hover:bg-green-700 font-black"><Trophy className="w-4 h-4 mr-2" />Eu Ganhei</Button>
+                                <Button onClick={() => claim(t.id, active.id, 'loss')} disabled={busy} variant="destructive" className="h-12 font-black"><XCircle className="w-4 h-4 mr-2" />Eu Perdi</Button>
+                              </div>
+                              <Button variant="outline" size="sm" onClick={() => setReportMatchId(active.id)} className="w-full border-orange-500/40 text-orange-300 hover:bg-orange-500/10 text-xs">
+                                <AlertTriangle className="w-3.5 h-3.5 mr-1.5" /> Denunciar Problema no Torneio
+                              </Button>
                             </div>
                           ) : (
-                            <div className="text-center text-sm text-muted-foreground glow-card p-3 rounded-lg">A aguardar resposta do adversário...</div>
+                            <div className="text-center text-sm text-muted-foreground bg-zinc-800/60 rounded-xl p-3">A aguardar resposta do adversário...</div>
                           )}
                         </div>
                       )
                     }
                     if (conflict) return (
-                      <div className="bg-orange-500/10 border border-orange-500/30 rounded-xl p-4 text-center">
-                        <AlertTriangle className="w-6 h-6 text-orange-300 mx-auto mb-1" />
+                      <div className="relative overflow-hidden rounded-2xl border-2 border-orange-500/50 bg-orange-500/5 p-5 text-center">
+                        <Badge className="mb-3 bg-yellow-500/20 text-yellow-300 border border-yellow-500/40 text-[10px] font-black">🏆 TORNEIO</Badge>
+                        <AlertTriangle className="w-8 h-8 text-orange-300 mx-auto mb-2" />
                         <div className="font-bold text-orange-300">Resultado em conflito</div>
-                        <div className="text-xs text-muted-foreground mt-1">O administrador irá resolver o teu duelo.</div>
+                        <div className="text-xs text-muted-foreground mt-1">O administrador irá resolver o teu duelo de torneio.</div>
                       </div>
                     )
                     return null
@@ -1684,6 +1709,47 @@ function TournamentsView({ me }) {
           )
         })}
       </div>
+
+      {/* Tournament match report dialog */}
+      <Dialog open={!!reportMatchId} onOpenChange={o => { if (!o) { setReportMatchId(null); setReportForm({ reason: '', files: [] }) } }}>
+        <DialogContent className="bg-card border-orange-500/30 w-[calc(100vw-2rem)] sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Badge className="bg-yellow-500/20 text-yellow-300 border border-yellow-500/40 text-[10px]">🏆 TORNEIO</Badge>
+              <AlertTriangle className="w-5 h-5 text-orange-400" /> Denunciar Problema
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="text-xs text-orange-300 bg-orange-500/10 border border-orange-500/30 rounded-lg p-3">
+              ⚠️ Denúncias falsas resultam em eliminação do torneio. Usa apenas com provas válidas.
+            </div>
+            <div>
+              <Label>Descrição *</Label>
+              <Textarea value={reportForm.reason} onChange={e => setReportForm({...reportForm, reason: e.target.value})} rows={3} placeholder="Descreve o que aconteceu: hack, resultado errado, comportamento abusivo..." required />
+            </div>
+            <div>
+              <Label>📎 Capturas de ecrã (opcional, até 4)</Label>
+              <Input type="file" accept="image/*" multiple onChange={e => setReportForm({...reportForm, files: Array.from(e.target.files || []).slice(0,4)})} className="cursor-pointer" />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setReportMatchId(null); setReportForm({ reason: '', files: [] }) }}>Cancelar</Button>
+            <Button disabled={busy || !reportForm.reason} onClick={async () => {
+              setBusy(true)
+              try {
+                const screenshots = await Promise.all((reportForm.files || []).map(f => new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsDataURL(f) })))
+                const tId = list.find(t => details?.matches?.some(m => m.id === reportMatchId))?.id || selected
+                await api(`/tournaments/${tId}/match/${reportMatchId}/report`, { method: 'POST', body: JSON.stringify({ reason: reportForm.reason, screenshots }) })
+                toast.success('Denúncia de torneio enviada. O admin irá resolver.')
+                setReportMatchId(null); setReportForm({ reason: '', files: [] })
+                if (tId) loadDetails(tId)
+              } catch(e) { toast.error(e.message) } finally { setBusy(false) }
+            }} className="bg-orange-600 hover:bg-orange-700">
+              <Send className="w-4 h-4 mr-2" />{busy ? 'A enviar...' : 'Enviar'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
