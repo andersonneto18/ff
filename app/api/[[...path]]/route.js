@@ -9,7 +9,7 @@ export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, { apiVersion: '2024-06-20' })
-const COMMISSION = parseFloat(process.env.PLATFORM_COMMISSION_PERCENT || '10') / 100
+const COMMISSION = parseFloat(process.env.PLATFORM_COMMISSION_PERCENT || '15') / 100
 const WITHDRAWAL_TYPES = ['IBAN', 'MBWAY', 'TRANSFERENCIA']
 
 function cors(res) {
@@ -109,8 +109,9 @@ async function handleRoute(request, { params }) {
 
     // ===== PLATFORM STATUS (public) =====
     if (route === '/platform-status' && method === 'GET') {
-      const setting = await db.collection('platform_settings').findOne({ key: 'topupsEnabled' })
-      return J({ topupsEnabled: setting ? setting.value !== '0' : true })
+      const rows = await db.collection('platform_settings').find({}).toArray()
+      const map = Object.fromEntries(rows.map(s => [s.key, s.value]))
+      return J({ topupsEnabled: map.topupsEnabled !== '0', stripeEnabled: map.stripeEnabled !== '0', mbwayPhone: map.mbwayPhone || null, commissionPercent: Math.round(COMMISSION * 100) })
     }
 
     // ===== AUTH =====
@@ -426,6 +427,37 @@ async function handleRoute(request, { params }) {
       return J({ credited, alreadyProcessed, totalCentsCredited, balanceCents: updated.balanceCents || 0 })
     }
 
+    // ===== MB WAY TOP-UP (player submits proof) =====
+    if (route === '/wallet/topup/mbway' && method === 'POST') {
+      const user = await getUserFromRequest(request)
+      if (!user) return ERR('Não autenticado', 401)
+      if (user.banned) return ERR('Conta banida', 403)
+      const topupSetting = await db.collection('platform_settings').findOne({ key: 'topupsEnabled' })
+      if (topupSetting && topupSetting.value === '0') return ERR('Carregamentos desativados. A plataforma está em manutenção.', 503)
+      const mbwayPhoneSetting = await db.collection('platform_settings').findOne({ key: 'mbwayPhone' })
+      if (!mbwayPhoneSetting?.value) return ERR('Carregamento via MB WAY não disponível de momento.', 503)
+      const { amountEuros, proofImage } = await request.json()
+      const cents = Math.round(parseFloat(amountEuros) * 100)
+      if (!cents || cents < 100) return ERR('Valor mínimo: 1€')
+      if (cents > 500000) return ERR('Valor máximo: 5000€')
+      if (!proofImage) return ERR('Comprovativo de pagamento obrigatório')
+      const topup = {
+        id: uuidv4(), userId: user.id, amountCents: cents,
+        proofImage, status: 'PENDENTE', createdAt: new Date(),
+      }
+      await db.collection('mbway_topups').insertOne(topup)
+      await createNotification(db, user.id, 'topup_pending', 'Comprovativo recebido',
+        `O teu comprovativo de carregamento de ${(cents/100).toFixed(2)}€ via MB WAY foi recebido e está a aguardar confirmação pela equipa.`, topup.id)
+      return J({ ok: true })
+    }
+
+    if (route === '/wallet/mbway-topups' && method === 'GET') {
+      const user = await getUserFromRequest(request)
+      if (!user) return ERR('Não autenticado', 401)
+      const list = await db.collection('mbway_topups').find({ userId: user.id }).sort({ createdAt: -1 }).limit(20).toArray()
+      return J({ topups: list.map(t => { const { proofImage, ...rest } = clean(t); return rest }) })
+    }
+
     // ===== WALLET =====
     if (route === '/wallet' && method === 'GET') {
       const user = await getUserFromRequest(request)
@@ -577,7 +609,7 @@ async function handleRoute(request, { params }) {
       if (user.banned) return ERR('Conta banida', 403)
       const { amountEuros } = await request.json()
       const cents = Math.round(parseFloat(amountEuros) * 100)
-      if (!cents || cents < 1000) return ERR('Valor mínimo: 10€')
+      if (!cents || cents < 200) return ERR('Valor mínimo: 2€')
       if (cents > (user.balanceCents || 0)) return ERR('Saldo insuficiente')
 
       const method = await db.collection('withdrawal_methods').findOne({ userId: user.id })
@@ -640,24 +672,48 @@ async function handleRoute(request, { params }) {
       if (route === '/admin/settings' && method === 'GET') {
         const rows = await db.collection('platform_settings').find({}).toArray()
         const map = Object.fromEntries(rows.map(s => [s.key, s.value]))
-        return J({ topupsEnabled: map.topupsEnabled !== '0' })
+        return J({ topupsEnabled: map.topupsEnabled !== '0', stripeEnabled: map.stripeEnabled !== '0', mbwayPhone: map.mbwayPhone || null })
       }
 
       if (route === '/admin/settings' && method === 'POST') {
-        const { topupsEnabled } = await request.json()
-        const val = topupsEnabled ? '1' : '0'
-        const existing = await db.collection('platform_settings').findOne({ key: 'topupsEnabled' })
-        if (existing) {
-          await db.collection('platform_settings').updateOne({ key: 'topupsEnabled' }, { $set: { value: val } })
-        } else {
-          await db.collection('platform_settings').insertOne({ key: 'topupsEnabled', value: val })
+        const body = await request.json()
+        if (typeof body.topupsEnabled !== 'undefined') {
+          const val = body.topupsEnabled ? '1' : '0'
+          const existing = await db.collection('platform_settings').findOne({ key: 'topupsEnabled' })
+          if (existing) {
+            await db.collection('platform_settings').updateOne({ key: 'topupsEnabled' }, { $set: { value: val } })
+          } else {
+            await db.collection('platform_settings').insertOne({ key: 'topupsEnabled', value: val })
+          }
+          await logAudit(db, admin, body.topupsEnabled ? 'topups_enabled' : 'topups_disabled', 'platform', 'settings')
         }
-        await logAudit(db, admin, topupsEnabled ? 'topups_enabled' : 'topups_disabled', 'platform', 'settings')
-        return J({ success: true, topupsEnabled })
+        if (typeof body.stripeEnabled !== 'undefined') {
+          const val = body.stripeEnabled ? '1' : '0'
+          const existing = await db.collection('platform_settings').findOne({ key: 'stripeEnabled' })
+          if (existing) {
+            await db.collection('platform_settings').updateOne({ key: 'stripeEnabled' }, { $set: { value: val } })
+          } else {
+            await db.collection('platform_settings').insertOne({ key: 'stripeEnabled', value: val })
+          }
+          await logAudit(db, admin, body.stripeEnabled ? 'stripe_enabled' : 'stripe_disabled', 'platform', 'settings')
+        }
+        if (typeof body.mbwayPhone !== 'undefined') {
+          const phone = (body.mbwayPhone || '').trim()
+          const existing = await db.collection('platform_settings').findOne({ key: 'mbwayPhone' })
+          if (existing) {
+            await db.collection('platform_settings').updateOne({ key: 'mbwayPhone' }, { $set: { value: phone } })
+          } else {
+            await db.collection('platform_settings').insertOne({ key: 'mbwayPhone', value: phone })
+          }
+          await logAudit(db, admin, 'mbway_phone_updated', 'platform', 'settings', phone)
+        }
+        const updated = await db.collection('platform_settings').find({}).toArray()
+        const map = Object.fromEntries(updated.map(s => [s.key, s.value]))
+        return J({ success: true, topupsEnabled: map.topupsEnabled !== '0', stripeEnabled: map.stripeEnabled !== '0', mbwayPhone: map.mbwayPhone || null })
       }
 
       if (route === '/admin/dashboard' && method === 'GET') {
-        const [totalUsers, totalRooms, inProgress, finalized, disputes, conflicts, pendingReports, pendingWithdrawals, banned, commissions, topupAgg, withdrawalsPaidAgg] = await Promise.all([
+        const [totalUsers, totalRooms, inProgress, finalized, disputes, conflicts, pendingReports, pendingWithdrawals, banned, commissions, topupAgg, withdrawalsPaidAgg, pendingMbwayTopups] = await Promise.all([
           db.collection('users').countDocuments({ isAdmin: { $ne: true } }),
           db.collection('rooms').countDocuments({}),
           db.collection('rooms').countDocuments({ status: 'EM_ANDAMENTO' }),
@@ -679,18 +735,17 @@ async function handleRoute(request, { params }) {
             { $match: { status: 'PAGO' } },
             { $group: { _id: null, total: { $sum: '$amountCents' } } }
           ]).toArray(),
+          db.collection('mbway_topups').countDocuments({ status: 'PENDENTE' }),
         ])
-        const STRIPE_FEE_PCT = parseFloat(process.env.STRIPE_FEE_PERCENT || '1.4') / 100
-        const STRIPE_FEE_FIXED_CENTS = parseInt(process.env.STRIPE_FEE_FIXED_CENTS || '25')
         const totalTopupsCents = topupAgg[0]?.total || 0
         const topupCount = topupAgg[0]?.count || 0
-        const stripeFeesCents = Math.round(totalTopupsCents * STRIPE_FEE_PCT) + (topupCount * STRIPE_FEE_FIXED_CENTS)
         const withdrawalsPaidCents = withdrawalsPaidAgg[0]?.total || 0
-        const netProfitCents = totalTopupsCents - stripeFeesCents - withdrawalsPaidCents
+        const netProfitCents = totalTopupsCents - withdrawalsPaidCents
         return J({
           totalUsers, totalRooms, inProgress, finalized, disputes, conflicts, pendingReports, pendingWithdrawals, banned,
           revenueCents: commissions[0]?.total || 0,
-          totalTopupsCents, topupCount, stripeFeesCents, withdrawalsPaidCents, netProfitCents,
+          totalTopupsCents, topupCount, withdrawalsPaidCents, netProfitCents,
+          pendingMbwayTopups,
         })
       }
 
@@ -853,6 +908,57 @@ async function handleRoute(request, { params }) {
       if (route === '/admin/audit-log' && method === 'GET') {
         const list = await db.collection('audit_log').find({}).sort({ createdAt: -1 }).limit(200).toArray()
         return J({ log: list.map(clean) })
+      }
+
+      // ===== ADMIN: MB WAY TOP-UPS =====
+      if (route === '/admin/mbway-topups' && method === 'GET') {
+        const url = new URL(request.url)
+        const status = url.searchParams.get('status')
+        const filter = status && status !== 'all' ? { status } : {}
+        const list = await db.collection('mbway_topups').find(filter).sort({ createdAt: -1 }).limit(200).toArray()
+        const ids = [...new Set(list.map(t => t.userId))]
+        const users = await db.collection('users').find({ id: { $in: ids } }).toArray()
+        const umap = Object.fromEntries(users.map(u => [u.id, { id: u.id, name: u.name, ffNickname: u.ffNickname, email: u.email }]))
+        return J({ topups: list.map(t => ({ ...clean(t), user: umap[t.userId] })) })
+      }
+
+      const mbwayTopupMatch = route.match(/^\/admin\/mbway-topup\/([^\/]+)\/(confirm|reject)$/)
+      if (mbwayTopupMatch && method === 'POST') {
+        const tId = mbwayTopupMatch[1]
+        const tAction = mbwayTopupMatch[2]
+        const topup = await db.collection('mbway_topups').findOne({ id: tId })
+        if (!topup) return ERR('Pedido de carregamento não encontrado', 404)
+        if (topup.status !== 'PENDENTE') return ERR('Este pedido já foi processado')
+
+        if (tAction === 'confirm') {
+          const user = await db.collection('users').findOne({ id: topup.userId })
+          if (!user) return ERR('Utilizador não encontrado', 404)
+          const newBalance = (user.balanceCents || 0) + topup.amountCents
+          await db.collection('mbway_topups').updateOne({ id: tId }, {
+            $set: { status: 'CONFIRMADO', confirmedAt: new Date(), confirmedByName: admin.name || admin.email }
+          })
+          await db.collection('users').updateOne({ id: topup.userId }, { $set: { balanceCents: newBalance } })
+          await db.collection('transactions').insertOne({
+            id: uuidv4(), userId: topup.userId, type: 'topup', amountCents: topup.amountCents,
+            balance: newBalance, description: `Carregamento MB WAY confirmado`, createdAt: new Date(),
+          })
+          await createNotification(db, topup.userId, 'topup_confirmed', 'Carregamento MB WAY confirmado',
+            `O teu carregamento de ${(topup.amountCents/100).toFixed(2)}€ via MB WAY foi confirmado e adicionado ao teu saldo.`, tId)
+          await logAudit(db, admin, 'mbway_topup_confirmed', 'mbway_topup', tId, `valor=${(topup.amountCents/100).toFixed(2)}eur`)
+          return J({ ok: true })
+        }
+
+        if (tAction === 'reject') {
+          const body = await request.json().catch(() => ({}))
+          const reason = body.reason || ''
+          await db.collection('mbway_topups').updateOne({ id: tId }, {
+            $set: { status: 'REJEITADO', rejectionReason: reason, confirmedByName: admin.name || admin.email, confirmedAt: new Date() }
+          })
+          await createNotification(db, topup.userId, 'topup_rejected', 'Carregamento MB WAY rejeitado',
+            `O teu pedido de carregamento de ${(topup.amountCents/100).toFixed(2)}€ via MB WAY foi rejeitado.${reason ? ` Motivo: ${reason}` : ''}`, tId)
+          await logAudit(db, admin, 'mbway_topup_rejected', 'mbway_topup', tId, reason)
+          return J({ ok: true })
+        }
       }
 
       if (route === '/admin/ban' && method === 'POST') {

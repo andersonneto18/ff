@@ -15,7 +15,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Switch } from '@/components/ui/switch'
-import { Gamepad2, Flame, Trophy, Wallet as WalletIcon, Users, Plus, Crown, Shield, LogOut, Swords, Target, Activity, Sparkles, Zap, AlertTriangle, XCircle, ChevronRight, Coins, Send, Image as ImageIcon, Landmark, CheckCircle2, MessageSquare, Bell, TrendingUp, Banknote, Lock, Star, BadgeCheck, Timer } from 'lucide-react'
+import { Gamepad2, Flame, Trophy, Wallet as WalletIcon, Users, Plus, Crown, Shield, LogOut, Swords, Target, Activity, Sparkles, Zap, AlertTriangle, XCircle, ChevronRight, Coins, Send, Image as ImageIcon, Landmark, CheckCircle2, MessageSquare, Bell, TrendingUp, Banknote, Lock, Star, BadgeCheck, Timer, Copy, Smartphone } from 'lucide-react'
 
 const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY)
 
@@ -530,7 +530,11 @@ function RoomCard({ room, onOpen }) {
 function CreateRoomDialog({ open, onOpenChange, balanceCents, onNeedTopup, onSuccess }) {
   const api = useApi()
   const [loading, setLoading] = useState(false)
+  const [commissionPct, setCommissionPct] = useState(15)
   const [form, setForm] = useState({ betEuros: '1', mode: 'X1', roomType: 'Rápida', server: '', weapons: 'Todas', platform: 'Mobile', notes: '' })
+  useEffect(() => {
+    fetch('/api/platform-status').then(r => r.json()).then(d => { if (d.commissionPercent) setCommissionPct(d.commissionPercent) }).catch(() => {})
+  }, [])
   const submit = async (e) => {
     e.preventDefault()
     setLoading(true)
@@ -585,13 +589,16 @@ function CreateRoomDialog({ open, onOpenChange, balanceCents, onNeedTopup, onSuc
           </div>
           <div><Label>📝 Observações (opcional)</Label><Textarea value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} rows={2} /></div>
 
-          <div className="glow-card rounded-lg p-4 text-sm space-y-1">
+          <div className="glow-card rounded-lg p-4 text-sm space-y-1.5">
             <div className="flex justify-between"><span className="text-muted-foreground">Saldo atual:</span><b className={hasBalance ? 'text-green-300' : 'text-red-300'}>{fmt(balanceCents)}</b></div>
             <div className="flex justify-between"><span className="text-muted-foreground">A tua aposta:</span><b>{betNum.toFixed(2)}€</b></div>
             <div className="flex justify-between"><span className="text-muted-foreground">Aposta adversário:</span><b>{betNum.toFixed(2)}€</b></div>
             <div className="flex justify-between text-purple-300"><span>Pote total:</span><b>{(betNum*2).toFixed(2)}€</b></div>
-            <div className="flex justify-between"><span className="text-muted-foreground">Comissão 20%:</span><span>-{(betNum*2*0.20).toFixed(2)}€</span></div>
-            <div className="flex justify-between text-green-300 text-base font-bold"><span>Prémio vencedor:</span><span>{(betNum*2*0.80).toFixed(2)}€</span></div>
+            <div className="flex justify-between text-zinc-400"><span>Comissão plataforma ({commissionPct}%):</span><span>-{(betNum*2*commissionPct/100).toFixed(2)}€</span></div>
+            <div className="flex justify-between text-green-300 text-base font-bold border-t border-green-500/20 pt-1.5 mt-0.5">
+              <span>Se ganhares recebes:</span>
+              <span>{(betNum*2*(1-commissionPct/100)).toFixed(2)}€</span>
+            </div>
           </div>
 
           {!hasBalance && betNum >= 1 && (
@@ -873,11 +880,6 @@ function RoomDetail({ roomId, me, onBack, refreshMe }) {
               A analisar a resposta do outro jogador...
             </div>
           )}
-          {room.status === 'EM_ANDAMENTO' && isParticipant && (
-            <Button variant="outline" onClick={() => setReportOpen(true)} className="w-full border-red-500/40 text-red-300">
-              <AlertTriangle className="w-4 h-4 mr-2" /> Denunciar / Disputar
-            </Button>
-          )}
           {room.status === 'FINALIZADA' && (
             <div className="glow-card p-5 rounded-xl text-center">
               {room.winnerId === me?.id && (
@@ -891,7 +893,7 @@ function RoomDetail({ roomId, me, onBack, refreshMe }) {
               <div className="text-green-300 mt-2">Prémio: {fmt(room.prizeCents)}</div>
               {isParticipant && room.winnerId !== me?.id && (
                 <div className="mt-4 pt-4 border-t border-red-500/30">
-                  <p className="text-sm text-muted-foreground mb-3">Suspeitas de trapaça? Tens 24h para denunciar o resultado com provas.</p>
+                  <p className="text-sm text-muted-foreground mb-3">Achas que houve trapaça? Tens 24h para denunciar com provas.</p>
                   <Button onClick={() => setReportOpen(true)} variant="outline" className="border-red-500/50 text-red-300 hover:bg-red-500/10">
                     <AlertTriangle className="w-4 h-4 mr-2" /> Denunciar Trapaça
                   </Button>
@@ -964,7 +966,30 @@ function RoomDetail({ roomId, me, onBack, refreshMe }) {
   )
 }
 
-function WalletView({ refreshMe }) {
+function compressImage(file) {
+  return new Promise((resolve) => {
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      const img = new Image()
+      img.onload = () => {
+        const MAX = 1280
+        let { width, height } = img
+        if (width > MAX || height > MAX) {
+          if (width > height) { height = Math.round(height * MAX / width); width = MAX }
+          else { width = Math.round(width * MAX / height); height = MAX }
+        }
+        const canvas = document.createElement('canvas')
+        canvas.width = width; canvas.height = height
+        canvas.getContext('2d').drawImage(img, 0, 0, width, height)
+        resolve(canvas.toDataURL('image/jpeg', 0.75))
+      }
+      img.src = e.target.result
+    }
+    reader.readAsDataURL(file)
+  })
+}
+
+function WalletView({ refreshMe, stripeEnabled }) {
   const api = useApi()
   const sp = useSearchParams()
   const [data, setData] = useState(null)
@@ -974,6 +999,10 @@ function WalletView({ refreshMe }) {
   const [methodOpen, setMethodOpen] = useState(false)
   const [topupOpen, setTopupOpen] = useState(false)
   const [topupAmount, setTopupAmount] = useState('10')
+  const [topupMethod, setTopupMethod] = useState('mbway')
+  const [mbwayPhone, setMbwayPhone] = useState(null)
+  const [mbwayProof, setMbwayProof] = useState(null)
+  const [mbwayTopups, setMbwayTopups] = useState([])
   const [form, setForm] = useState({ amountEuros: '10' })
   const [methodForm, setMethodForm] = useState({ fullName: '', type: 'IBAN', iban: '', mbway: '', bank: '', notes: '' })
   const [busy, setBusy] = useState(false)
@@ -991,11 +1020,17 @@ function WalletView({ refreshMe }) {
       }
     } catch (e) { /* ignore */ }
   }, [api])
+  const loadMbwayTopups = useCallback(async () => {
+    try { const r = await api('/wallet/mbway-topups'); setMbwayTopups(r.topups || []) } catch (e) { /* ignore */ }
+  }, [api])
   useEffect(() => {
-    load(); loadMethod()
+    load(); loadMethod(); loadMbwayTopups()
     const i = setInterval(load, 4000)
     return () => clearInterval(i)
-  }, [load, loadMethod])
+  }, [load, loadMethod, loadMbwayTopups])
+  useEffect(() => {
+    fetch('/api/platform-status').then(r => r.json()).then(d => setMbwayPhone(d.mbwayPhone || null)).catch(() => {})
+  }, [])
 
   // Auto-open topup if redirected with ?topup=cents
   useEffect(() => {
@@ -1033,6 +1068,30 @@ function WalletView({ refreshMe }) {
       const stripe = await stripePromise
       await stripe.redirectToCheckout({ sessionId: r.id })
     } catch (e) { toast.error(e.message); setBusy(false) }
+  }
+
+  const handleProofFile = async (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    if (!file.type.startsWith('image/')) { toast.error('Seleciona uma imagem'); return }
+    setBusy(true)
+    try { setMbwayProof(await compressImage(file)) }
+    catch (e) { toast.error('Erro ao processar imagem') }
+    finally { setBusy(false) }
+  }
+
+  const submitMbwayTopup = async () => {
+    if (!mbwayProof) { toast.error('Seleciona o comprovativo de pagamento'); return }
+    const cents = Math.round(parseFloat(topupAmount) * 100)
+    if (!cents || cents < 100) { toast.error('Valor mínimo: 1€'); return }
+    setBusy(true)
+    try {
+      await api('/wallet/topup/mbway', { method: 'POST', body: JSON.stringify({ amountEuros: topupAmount, proofImage: mbwayProof }) })
+      toast.success('Comprovativo enviado! O teu saldo será creditado após confirmação.')
+      setTopupOpen(false)
+      setMbwayProof(null)
+      loadMbwayTopups()
+    } catch (e) { toast.error(e.message) } finally { setBusy(false) }
   }
 
   const request = async () => {
@@ -1123,6 +1182,32 @@ function WalletView({ refreshMe }) {
         </div>
       </Card>
 
+      {mbwayTopups.length > 0 && (
+        <Card className="glow-card p-5 border-blue-500/20">
+          <h3 className="font-bold mb-3 flex items-center gap-2"><Smartphone className="w-4 h-4 text-blue-400" />Carregamentos MB WAY</h3>
+          <div className="space-y-2">
+            {mbwayTopups.map(t => {
+              const stMap = {
+                PENDENTE: { label: 'Pendente', cls: 'bg-yellow-500/20 text-yellow-300' },
+                CONFIRMADO: { label: 'Confirmado', cls: 'bg-green-500/20 text-green-300' },
+                REJEITADO: { label: 'Rejeitado', cls: 'bg-red-500/20 text-red-300' },
+              }
+              const st = stMap[t.status] || { label: t.status, cls: 'bg-muted/30 text-muted-foreground' }
+              return (
+                <div key={t.id} className="flex items-center justify-between text-sm border-b border-border/40 pb-2">
+                  <div>
+                    <div className="font-medium">{fmt(t.amountCents)} via MB WAY</div>
+                    <div className="text-xs text-muted-foreground">{new Date(t.createdAt).toLocaleString('pt-PT')}</div>
+                    {t.status === 'REJEITADO' && t.rejectionReason && <div className="text-xs text-red-300">Motivo: {t.rejectionReason}</div>}
+                  </div>
+                  <Badge className={st.cls}>{st.label}</Badge>
+                </div>
+              )
+            })}
+          </div>
+        </Card>
+      )}
+
       <Card className="glow-card p-5 border-purple-500/20">
         <h3 className="font-bold mb-3">Pedidos de Levantamento</h3>
         <div className="space-y-2">
@@ -1147,23 +1232,85 @@ function WalletView({ refreshMe }) {
         </div>
       </Card>
 
-      <Dialog open={topupOpen} onOpenChange={setTopupOpen}>
+      <Dialog open={topupOpen} onOpenChange={(o) => { setTopupOpen(o); if (!o) { setMbwayProof(null) } }}>
         <DialogContent className="bg-card border-green-500/30 w-[calc(100vw-2rem)] sm:max-w-md">
           <DialogHeader><DialogTitle className="flex items-center gap-2"><Plus className="w-5 h-5 text-green-300" />Carregar Saldo</DialogTitle></DialogHeader>
           <div className="space-y-4">
-            <div className="text-sm text-muted-foreground">O valor será adicionado ao teu saldo após confirmação do pagamento.</div>
-            <div className="grid grid-cols-3 gap-2">
-              {[5, 10, 20, 50, 100, 200].map(v => (
-                <Button key={v} type="button" variant={topupAmount === String(v) ? 'default' : 'outline'} onClick={() => setTopupAmount(String(v))} className={topupAmount === String(v) ? 'bg-gradient-to-r from-green-600 to-emerald-500' : ''}>{v}€</Button>
-              ))}
+            {/* Method toggle */}
+            <div className="grid grid-cols-2 gap-2 p-1 bg-zinc-800/60 rounded-lg">
+              <button onClick={() => setTopupMethod('stripe')} className={`py-2 rounded-md text-sm font-semibold transition flex items-center justify-center gap-1.5 ${topupMethod === 'stripe' ? 'bg-gradient-to-r from-green-600 to-emerald-500 text-white' : stripeEnabled ? 'text-zinc-400 hover:text-white' : 'text-zinc-500'}`}>
+                {!stripeEnabled && <AlertTriangle className="w-3.5 h-3.5 text-yellow-500" />} {stripeEnabled ? 'Cartão (Stripe)' : 'Cartão (Manutencao)'}
+              </button>
+              <button onClick={() => setTopupMethod('mbway')} className={`py-2 rounded-md text-sm font-semibold transition flex items-center justify-center gap-1.5 ${topupMethod === 'mbway' ? 'bg-blue-600 text-white' : 'text-zinc-400 hover:text-white'}`}>
+                <Smartphone className="w-4 h-4" /> MB WAY
+              </button>
             </div>
-            <div>
-              <Label>Valor personalizado (€)</Label>
-              <Input type="number" min="5" step="0.50" value={topupAmount} onChange={e => setTopupAmount(e.target.value)} />
-            </div>
-            <Button onClick={startTopup} disabled={busy || !parseFloat(topupAmount)} className="w-full bg-gradient-to-r from-green-600 to-emerald-500 h-11 font-bold">
-              {busy ? 'A redirecionar...' : `Pagar ${parseFloat(topupAmount || 0).toFixed(2)}€`}
-            </Button>
+
+            {/* Amount selector — shown for all methods except stripe-in-maintenance */}
+            {!(topupMethod === 'stripe' && !stripeEnabled) && (
+              <>
+                <div className="grid grid-cols-3 gap-2">
+                  {(topupMethod === 'mbway' ? [1, 2, 5, 10, 20, 50] : [5, 10, 20, 50, 100, 200]).map(v => (
+                    <Button key={v} type="button" variant={topupAmount === String(v) ? 'default' : 'outline'} onClick={() => setTopupAmount(String(v))} className={topupAmount === String(v) ? (topupMethod === 'mbway' ? 'bg-blue-600' : 'bg-gradient-to-r from-green-600 to-emerald-500') : ''}>{v}€</Button>
+                  ))}
+                </div>
+                <div>
+                  <Label>Valor personalizado (€)</Label>
+                  <Input type="number" min={topupMethod === 'mbway' ? '1' : '5'} step="0.50" value={topupAmount} onChange={e => setTopupAmount(e.target.value)} />
+                </div>
+              </>
+            )}
+
+            {topupMethod === 'stripe' ? (
+              stripeEnabled ? (
+                <Button onClick={startTopup} disabled={busy || !parseFloat(topupAmount)} className="w-full bg-gradient-to-r from-green-600 to-emerald-500 h-11 font-bold">
+                  {busy ? 'A redirecionar...' : `Pagar ${parseFloat(topupAmount || 0).toFixed(2)}€`}
+                </Button>
+              ) : (
+                <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-4 text-center space-y-1">
+                  <AlertTriangle className="w-6 h-6 text-yellow-400 mx-auto" />
+                  <div className="text-sm font-semibold text-yellow-300">Carregamento por cartao em manutencao</div>
+                  <div className="text-xs text-zinc-400">O pagamento via Visa/Mastercard esta temporariamente indisponivel. Por favor usa o MB WAY.</div>
+                </div>
+              )
+            ) : (
+              <div className="space-y-3">
+                {mbwayPhone ? (
+                  <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-4">
+                    <div className="text-xs text-zinc-400 mb-1">Envia {parseFloat(topupAmount||0).toFixed(2)}€ para o número MB WAY:</div>
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="text-2xl font-black text-blue-300 tracking-wider">{mbwayPhone}</div>
+                      <button onClick={() => { navigator.clipboard?.writeText(mbwayPhone); toast.success('Número copiado!') }} className="flex items-center gap-1 text-xs text-zinc-400 hover:text-white bg-zinc-800 px-2 py-1 rounded">
+                        <Copy className="w-3.5 h-3.5" /> Copiar
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-sm text-yellow-300 bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-3">
+                    Carregamento via MB WAY não disponível de momento.
+                  </div>
+                )}
+                {mbwayPhone && (
+                  <>
+                    <div>
+                      <Label className="text-zinc-300">Comprovativo de pagamento (foto/screenshot)</Label>
+                      <label className="mt-1.5 flex items-center gap-2 cursor-pointer border border-dashed border-zinc-600 hover:border-blue-500 rounded-lg p-3 transition">
+                        <ImageIcon className="w-4 h-4 text-zinc-400" />
+                        <span className="text-sm text-zinc-400">{mbwayProof ? 'Imagem selecionada ✓' : 'Selecionar foto do comprovativo'}</span>
+                        <input type="file" accept="image/*" className="hidden" onChange={handleProofFile} />
+                      </label>
+                      {mbwayProof && (
+                        <img src={mbwayProof} alt="Comprovativo" className="mt-2 w-full max-h-48 object-contain rounded border border-zinc-700" />
+                      )}
+                    </div>
+                    <Button onClick={submitMbwayTopup} disabled={busy || !mbwayProof || !parseFloat(topupAmount)} className="w-full bg-blue-600 hover:bg-blue-700 h-11 font-bold">
+                      {busy ? 'A enviar...' : `Enviar comprovativo de ${parseFloat(topupAmount||0).toFixed(2)}€`}
+                    </Button>
+                    <p className="text-xs text-zinc-500 text-center">Após confirmação pela equipa FF Arena o saldo é creditado automaticamente.</p>
+                  </>
+                )}
+              </div>
+            )}
           </div>
         </DialogContent>
       </Dialog>
@@ -1281,11 +1428,11 @@ function Stat({ label, value, color }) {
 
 function Shell({ me, onLogout, view, setView, children }) {
   const [topupsEnabled, setTopupsEnabled] = useState(true)
+  const [stripeEnabled, setStripeEnabled] = useState(false)
   useEffect(() => {
-    fetch('/api/platform-status').then(r => r.json()).then(d => setTopupsEnabled(d.topupsEnabled)).catch(() => {})
-    const i = setInterval(() => {
-      fetch('/api/platform-status').then(r => r.json()).then(d => setTopupsEnabled(d.topupsEnabled)).catch(() => {})
-    }, 30000)
+    const load = () => fetch('/api/platform-status').then(r => r.json()).then(d => { setTopupsEnabled(d.topupsEnabled); setStripeEnabled(d.stripeEnabled) }).catch(() => {})
+    load()
+    const i = setInterval(load, 30000)
     return () => clearInterval(i)
   }, [])
 
@@ -1480,7 +1627,7 @@ function Dashboard({ me, onLogout, refreshMe }) {
           )}
         </div>
       )}
-      {view === 'wallet' && <WalletView refreshMe={refreshMe} />}
+      {view === 'wallet' && <WalletView refreshMe={refreshMe} stripeEnabled={stripeEnabled} />}
       {view === 'ranking' && <Ranking />}
       {view === 'profile' && (
         <Card className="glow-card p-4 sm:p-6 border-purple-500/30">

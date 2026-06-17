@@ -9,7 +9,7 @@ import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
-import { Shield, LayoutDashboard, Gamepad2, AlertTriangle, Users, LogOut, Flame, Coins, Activity, CheckCircle2, XCircle, Ban, ShieldCheck, Crown, Wallet as WalletIcon, Image as ImageIcon, Video, Scale, MessageSquare, Landmark, ClipboardList, TrendingUp, ArrowDownLeft, ArrowUpRight, CreditCard } from 'lucide-react'
+import { Shield, LayoutDashboard, Gamepad2, AlertTriangle, Users, LogOut, Flame, Coins, Activity, CheckCircle2, XCircle, Ban, ShieldCheck, Crown, Wallet as WalletIcon, Image as ImageIcon, Video, Scale, MessageSquare, Landmark, ClipboardList, TrendingUp, ArrowDownLeft, ArrowUpRight, CreditCard, Smartphone, Copy } from 'lucide-react'
 
 const fmt = (cents) => `${((cents || 0) / 100).toFixed(2)}€`
 
@@ -96,9 +96,19 @@ function DashboardSection() {
   const [stats, setStats] = useState(null)
   const [topupsEnabled, setTopupsEnabled] = useState(true)
   const [togglingTopups, setTogglingTopups] = useState(false)
+  const [stripeEnabled, setStripeEnabled] = useState(true)
+  const [togglingStripe, setTogglingStripe] = useState(false)
+  const [mbwayPhone, setMbwayPhone] = useState('')
+  const [mbwayPhoneInput, setMbwayPhoneInput] = useState('')
+  const [savingPhone, setSavingPhone] = useState(false)
 
   useEffect(() => {
-    api('/admin/settings').then(s => setTopupsEnabled(s.topupsEnabled)).catch(() => {})
+    api('/admin/settings').then(s => {
+      setTopupsEnabled(s.topupsEnabled)
+      setStripeEnabled(s.stripeEnabled)
+      setMbwayPhone(s.mbwayPhone || '')
+      setMbwayPhoneInput(s.mbwayPhone || '')
+    }).catch(() => {})
   }, [])
 
   const toggleTopups = async () => {
@@ -111,6 +121,26 @@ function DashboardSection() {
     finally { setTogglingTopups(false) }
   }
 
+  const toggleStripe = async () => {
+    setTogglingStripe(true)
+    try {
+      const res = await api('/admin/settings', { method: 'POST', body: JSON.stringify({ stripeEnabled: !stripeEnabled }) })
+      setStripeEnabled(res.stripeEnabled)
+      toast.success(res.stripeEnabled ? 'Pagamento por cartão activado' : 'Pagamento por cartão desactivado')
+    } catch (e) { toast.error(e.message) }
+    finally { setTogglingStripe(false) }
+  }
+
+  const saveMbwayPhone = async () => {
+    setSavingPhone(true)
+    try {
+      const res = await api('/admin/settings', { method: 'POST', body: JSON.stringify({ mbwayPhone: mbwayPhoneInput }) })
+      setMbwayPhone(res.mbwayPhone || '')
+      toast.success(res.mbwayPhone ? `Número MB WAY guardado: ${res.mbwayPhone}` : 'Número MB WAY removido')
+    } catch (e) { toast.error(e.message) }
+    finally { setSavingPhone(false) }
+  }
+
   useEffect(() => { api('/admin/dashboard').then(setStats).catch(e => toast.error(e.message)); const i = setInterval(() => api('/admin/dashboard').then(setStats).catch(() => {}), 8000); return () => clearInterval(i) }, [])
   const cards = [
     { label: 'Total Jogadores', v: stats?.totalUsers, I: Users, color: 'from-purple-500 to-blue-500' },
@@ -118,6 +148,7 @@ function DashboardSection() {
     { label: 'Salas Finalizadas', v: stats?.finalized, I: CheckCircle2, color: 'from-green-500 to-emerald-500' },
     { label: 'Denúncias Pendentes', v: stats?.pendingReports, I: AlertTriangle, color: 'from-red-500 to-orange-500' },
     { label: 'Saques Pendentes', v: stats?.pendingWithdrawals, I: WalletIcon, color: 'from-yellow-500 to-amber-500' },
+    { label: 'MB WAY Pendentes', v: stats?.pendingMbwayTopups, I: Smartphone, color: 'from-blue-400 to-cyan-500' },
     { label: 'Jogadores Banidos', v: stats?.banned, I: Ban, color: 'from-zinc-500 to-zinc-700' },
     { label: 'Resultados em Conflito', v: stats?.conflicts, I: Scale, color: 'from-orange-500 to-amber-600' },
     { label: 'Salas em Disputa', v: stats?.disputes, I: AlertTriangle, color: 'from-rose-500 to-pink-500' },
@@ -127,15 +158,26 @@ function DashboardSection() {
     <div>
       <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
         <h1 className="text-3xl font-bold text-white">Dashboard</h1>
-        <Card className={`flex items-center gap-3 px-4 py-3 border ${topupsEnabled ? 'bg-green-500/10 border-green-500/40' : 'bg-red-500/10 border-red-500/40'}`}>
-          <div>
-            <div className="text-xs text-zinc-400">Carregamentos</div>
-            <div className={`text-sm font-bold ${topupsEnabled ? 'text-green-300' : 'text-red-300'}`}>{topupsEnabled ? 'Activos' : 'Desactivados'}</div>
-          </div>
-          <Button size="sm" disabled={togglingTopups} onClick={toggleTopups} className={topupsEnabled ? 'bg-red-600 hover:bg-red-700' : 'bg-green-600 hover:bg-green-700'}>
-            {togglingTopups ? '...' : topupsEnabled ? 'Desactivar' : 'Activar'}
-          </Button>
-        </Card>
+        <div className="flex flex-wrap gap-3">
+          <Card className={`flex items-center gap-3 px-4 py-3 border ${topupsEnabled ? 'bg-green-500/10 border-green-500/40' : 'bg-red-500/10 border-red-500/40'}`}>
+            <div>
+              <div className="text-xs text-zinc-400">Carregamentos</div>
+              <div className={`text-sm font-bold ${topupsEnabled ? 'text-green-300' : 'text-red-300'}`}>{topupsEnabled ? 'Activos' : 'Desactivados'}</div>
+            </div>
+            <Button size="sm" disabled={togglingTopups} onClick={toggleTopups} className={topupsEnabled ? 'bg-red-600 hover:bg-red-700' : 'bg-green-600 hover:bg-green-700'}>
+              {togglingTopups ? '...' : topupsEnabled ? 'Desactivar' : 'Activar'}
+            </Button>
+          </Card>
+          <Card className={`flex items-center gap-3 px-4 py-3 border ${stripeEnabled ? 'bg-green-500/10 border-green-500/40' : 'bg-red-500/10 border-red-500/40'}`}>
+            <div>
+              <div className="text-xs text-zinc-400">Cartão (Stripe)</div>
+              <div className={`text-sm font-bold ${stripeEnabled ? 'text-green-300' : 'text-red-300'}`}>{stripeEnabled ? 'Activo' : 'Em Manutencao'}</div>
+            </div>
+            <Button size="sm" disabled={togglingStripe} onClick={toggleStripe} className={stripeEnabled ? 'bg-red-600 hover:bg-red-700' : 'bg-green-600 hover:bg-green-700'}>
+              {togglingStripe ? '...' : stripeEnabled ? 'Desactivar' : 'Activar'}
+            </Button>
+          </Card>
+        </div>
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {cards.map((c, i) => (
@@ -150,6 +192,35 @@ function DashboardSection() {
         ))}
       </div>
 
+      {/* MB WAY settings card */}
+      <Card className="mt-4 bg-zinc-900 border-blue-500/30 p-5">
+        <div className="flex items-center gap-2 mb-4">
+          <Smartphone className="w-5 h-5 text-blue-400" />
+          <span className="font-bold text-white text-sm">Configuração MB WAY</span>
+          <span className="text-xs text-zinc-500">— número para onde os jogadores enviam os carregamentos</span>
+        </div>
+        <div className="flex gap-3 flex-wrap items-end">
+          <div className="flex-1 min-w-[200px]">
+            <label className="text-xs text-zinc-400 mb-1 block">Número MB WAY da plataforma</label>
+            <input
+              type="text"
+              value={mbwayPhoneInput}
+              onChange={e => setMbwayPhoneInput(e.target.value)}
+              placeholder="9XX XXX XXX"
+              className="w-full bg-zinc-800 border border-zinc-700 text-white rounded-md px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
+            />
+          </div>
+          <Button onClick={saveMbwayPhone} disabled={savingPhone} className="bg-blue-600 hover:bg-blue-700 shrink-0">
+            {savingPhone ? 'A guardar...' : 'Guardar'}
+          </Button>
+          {mbwayPhone && (
+            <div className="text-xs text-green-300 flex items-center gap-1">
+              <CheckCircle2 className="w-3.5 h-3.5" /> Activo: {mbwayPhone}
+            </div>
+          )}
+        </div>
+      </Card>
+
       {/* Profit breakdown card */}
       <Card className="mt-4 bg-zinc-900 border-emerald-500/30 p-5 relative overflow-hidden">
         <div className="absolute -right-10 -top-10 w-48 h-48 rounded-full bg-gradient-to-br from-emerald-500 to-teal-500 opacity-5 blur-3xl" />
@@ -158,22 +229,14 @@ function DashboardSection() {
             <TrendingUp className="w-5 h-5 text-emerald-400" />
             <span className="font-bold text-white text-sm">Lucro Líquido da Plataforma</span>
           </div>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="bg-zinc-800/60 rounded-lg p-4">
               <div className="flex items-center gap-1.5 mb-2">
                 <ArrowDownLeft className="w-3.5 h-3.5 text-blue-400" />
-                <span className="text-xs text-zinc-400">Carregamentos (bruto)</span>
+                <span className="text-xs text-zinc-400">Carregamentos (total)</span>
               </div>
               <div className="text-2xl font-black text-white">{fmt(stats?.totalTopupsCents)}</div>
               <div className="text-xs text-zinc-500 mt-1">{stats?.topupCount ?? 0} transações</div>
-            </div>
-            <div className="bg-zinc-800/60 rounded-lg p-4">
-              <div className="flex items-center gap-1.5 mb-2">
-                <CreditCard className="w-3.5 h-3.5 text-orange-400" />
-                <span className="text-xs text-zinc-400">Taxa Stripe (est. 1,4% + 0,25€)</span>
-              </div>
-              <div className="text-2xl font-black text-orange-400">-{fmt(stats?.stripeFeesCents)}</div>
-              <div className="text-xs text-zinc-500 mt-1">Desconto estimado</div>
             </div>
             <div className="bg-zinc-800/60 rounded-lg p-4">
               <div className="flex items-center gap-1.5 mb-2">
@@ -191,7 +254,7 @@ function DashboardSection() {
               <div className={`text-2xl font-black ${(stats?.netProfitCents ?? 0) >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
                 {fmt(stats?.netProfitCents)}
               </div>
-              <div className="text-xs text-zinc-500 mt-1">Carregamentos − Stripe − Saques</div>
+              <div className="text-xs text-zinc-500 mt-1">Carregamentos − Saques</div>
             </div>
           </div>
         </div>
@@ -792,6 +855,135 @@ function AuditSection() {
   )
 }
 
+// -------- MB WAY TOP-UPS --------
+function MbwayTopupsSection() {
+  const [list, setList] = useState([])
+  const [filter, setFilter] = useState('PENDENTE')
+  const [busy, setBusy] = useState(false)
+  const [rejectTarget, setRejectTarget] = useState(null)
+  const [rejectReason, setRejectReason] = useState('')
+  const [proofOpen, setProofOpen] = useState(null)
+
+  const load = useCallback(async () => {
+    try {
+      const q = filter === 'all' ? '' : `?status=${filter}`
+      const d = await api('/admin/mbway-topups' + q)
+      setList(d.topups || [])
+    } catch (e) { toast.error(e.message) }
+  }, [filter])
+  useEffect(() => { load(); const i = setInterval(load, 8000); return () => clearInterval(i) }, [load])
+
+  const confirm = async (id) => {
+    if (!window.confirm('Confirmar que recebeste este pagamento e creditar o saldo do jogador?')) return
+    setBusy(true)
+    try { await api(`/admin/mbway-topup/${id}/confirm`, { method: 'POST', body: '{}' }); toast.success('Carregamento confirmado e saldo creditado'); load() }
+    catch (e) { toast.error(e.message) } finally { setBusy(false) }
+  }
+
+  const openReject = (id) => { setRejectReason(''); setRejectTarget(id) }
+  const submitReject = async () => {
+    setBusy(true)
+    try {
+      await api(`/admin/mbway-topup/${rejectTarget}/reject`, { method: 'POST', body: JSON.stringify({ reason: rejectReason.trim() }) })
+      toast.success('Pedido rejeitado')
+      setRejectTarget(null)
+      load()
+    } catch (e) { toast.error(e.message) } finally { setBusy(false) }
+  }
+
+  const MBWAY_STATUS_COLORS = {
+    PENDENTE: 'bg-yellow-500/15 text-yellow-300 border-yellow-500/40',
+    CONFIRMADO: 'bg-green-500/15 text-green-300 border-green-500/40',
+    REJEITADO: 'bg-red-500/15 text-red-300 border-red-500/40',
+  }
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
+        <h1 className="text-3xl font-bold text-white">Carregamentos MB WAY ({list.length})</h1>
+        <div className="flex gap-1 flex-wrap">
+          {[['PENDENTE','Pendentes'],['CONFIRMADO','Confirmados'],['REJEITADO','Rejeitados'],['all','Todos']].map(([k, l]) => (
+            <Button key={k} size="sm" variant={filter === k ? 'default' : 'outline'} onClick={() => setFilter(k)} className={filter === k ? 'bg-purple-600' : 'border-zinc-700 text-zinc-300'}>{l}</Button>
+          ))}
+        </div>
+      </div>
+
+      <div className="space-y-3">
+        {list.map(t => (
+          <Card key={t.id} className={`bg-zinc-900 p-4 border ${t.status === 'PENDENTE' ? 'border-yellow-500/40' : 'border-zinc-800'}`}>
+            <div className="flex items-center justify-between flex-wrap gap-3 mb-3">
+              <div>
+                <div className="text-white font-bold">{t.user?.ffNickname || t.user?.name}</div>
+                <div className="text-xs text-zinc-500">{t.user?.email}</div>
+              </div>
+              <div className="text-2xl font-black text-blue-300">{fmt(t.amountCents)}</div>
+              <Badge variant="outline" className={MBWAY_STATUS_COLORS[t.status] || ''}>{t.status}</Badge>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm mb-3">
+              <div className="bg-zinc-800/60 rounded p-3">
+                <div className="text-xs text-zinc-400 mb-1">Data do pedido</div>
+                <div className="text-zinc-200">{new Date(t.createdAt).toLocaleString('pt-PT')}</div>
+              </div>
+              <div className="bg-zinc-800/60 rounded p-3">
+                <div className="text-xs text-zinc-400 mb-1">Comprovativo</div>
+                {t.proofImage ? (
+                  <button onClick={() => setProofOpen(t.proofImage)} className="block">
+                    <img src={t.proofImage} alt="Comprovativo" className="w-24 h-24 object-cover rounded border border-zinc-700 hover:border-blue-500 cursor-pointer" />
+                  </button>
+                ) : <div className="text-zinc-500 text-xs">Sem imagem</div>}
+              </div>
+            </div>
+
+            {t.status === 'CONFIRMADO' && t.confirmedAt && (
+              <div className="text-xs text-green-300 mb-2">Confirmado em {new Date(t.confirmedAt).toLocaleString('pt-PT')} por {t.confirmedByName}</div>
+            )}
+            {t.status === 'REJEITADO' && (
+              <div className="text-xs text-red-300 mb-2">Rejeitado por {t.confirmedByName}{t.rejectionReason ? `: ${t.rejectionReason}` : ''}</div>
+            )}
+
+            {t.status === 'PENDENTE' && (
+              <div className="flex gap-2 flex-wrap pt-2 border-t border-zinc-800">
+                <Button onClick={() => confirm(t.id)} disabled={busy} className="bg-green-600 hover:bg-green-700">
+                  <CheckCircle2 className="w-4 h-4 mr-2" /> Confirmar e Creditar
+                </Button>
+                <Button onClick={() => openReject(t.id)} disabled={busy} variant="destructive">
+                  <XCircle className="w-4 h-4 mr-2" /> Rejeitar
+                </Button>
+              </div>
+            )}
+          </Card>
+        ))}
+        {!list.length && <Card className="bg-zinc-900 border-zinc-800 p-8 text-center text-zinc-500">Sem pedidos para mostrar.</Card>}
+      </div>
+
+      {/* Proof image lightbox */}
+      {proofOpen && (
+        <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4" onClick={() => setProofOpen(null)}>
+          <img src={proofOpen} alt="Comprovativo" className="max-w-full max-h-full rounded-lg shadow-2xl" />
+        </div>
+      )}
+
+      <Dialog open={!!rejectTarget} onOpenChange={(open) => !open && setRejectTarget(null)}>
+        <DialogContent className="bg-zinc-900 border-zinc-800 text-white">
+          <DialogHeader><DialogTitle>Rejeitar carregamento MB WAY</DialogTitle></DialogHeader>
+          <div className="space-y-2">
+            <Label>Motivo da rejeição (opcional)</Label>
+            <Input value={rejectReason} onChange={e => setRejectReason(e.target.value)}
+              placeholder="Comprovativo inválido, valor incorreto..." className="bg-zinc-800 border-zinc-700 text-white" />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRejectTarget(null)} className="border-zinc-700">Cancelar</Button>
+            <Button onClick={submitReject} disabled={busy} variant="destructive">
+              <XCircle className="w-4 h-4 mr-2" /> Rejeitar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  )
+}
+
 // -------- LAYOUT --------
 function AdminLayout({ admin, onLogout }) {
   const [section, setSection] = useState('dashboard')
@@ -801,6 +993,7 @@ function AdminLayout({ admin, onLogout }) {
     ['disputes', 'Disputas', Scale],
     ['reports', 'Denúncias', AlertTriangle],
     ['withdrawals', 'Levantamentos', Landmark],
+    ['mbway-topups', 'MB WAY', Smartphone],
     ['players', 'Jogadores', Users],
     ['audit', 'Auditoria', ClipboardList],
   ]
@@ -853,6 +1046,7 @@ function AdminLayout({ admin, onLogout }) {
         {section === 'disputes' && <DisputesSection />}
         {section === 'reports' && <ReportsSection />}
         {section === 'withdrawals' && <WithdrawalsSection />}
+        {section === 'mbway-topups' && <MbwayTopupsSection />}
         {section === 'players' && <PlayersSection />}
         {section === 'audit' && <AuditSection />}
       </main>
