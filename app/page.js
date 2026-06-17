@@ -1690,6 +1690,27 @@ function Dashboard({ me, onLogout, refreshMe }) {
             </div>
             <Button onClick={() => setCreateOpen(true)} className="bg-gradient-to-r from-purple-600 to-blue-500 h-11"><Plus className="w-4 h-4 mr-2" />Criar Sala</Button>
           </div>
+
+          {/* Promotional banner */}
+          <div className="relative overflow-hidden rounded-2xl border border-yellow-500/40 bg-gradient-to-r from-yellow-500/10 via-amber-500/10 to-orange-500/10 p-4 sm:p-5">
+            <div className="absolute -right-8 -top-8 w-40 h-40 bg-yellow-500/10 rounded-full blur-2xl pointer-events-none" />
+            <div className="absolute -left-4 -bottom-4 w-32 h-32 bg-orange-500/10 rounded-full blur-2xl pointer-events-none" />
+            <div className="relative flex items-center gap-4 flex-wrap">
+              <div className="text-3xl">🎁</div>
+              <div className="flex-1 min-w-0">
+                <div className="font-black text-yellow-300 text-base sm:text-lg flex items-center gap-2 flex-wrap">
+                  Bónus de Boas-Vindas
+                  <span className="bg-yellow-500/20 border border-yellow-500/40 text-yellow-300 text-xs px-2 py-0.5 rounded-full font-bold">OFERTA LIMITADA</span>
+                </div>
+                <p className="text-sm text-zinc-300 mt-0.5">
+                  Os <span className="text-yellow-300 font-bold">3 primeiros jogadores</span> a criar uma sala e jogar uma partida recebem <span className="text-green-300 font-bold">+1€ de bónus</span> diretamente na conta. Não percas!
+                </p>
+              </div>
+              <Button onClick={() => setCreateOpen(true)} className="shrink-0 bg-gradient-to-r from-yellow-500 to-orange-500 hover:opacity-90 text-black font-black h-10">
+                <Zap className="w-4 h-4 mr-1" /> Quero o bónus
+              </Button>
+            </div>
+          </div>
           <div>
             <h3 className="text-sm font-bold uppercase tracking-wider text-purple-300 mb-2">Salas públicas</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
