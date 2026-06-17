@@ -380,11 +380,11 @@ function RoomsSection() {
     } catch (e) { toast.error(e.message) }
   }, [])
   useEffect(() => { load() }, [load])
-  const filtered = filter === 'all' ? rooms : rooms.filter(r => r.status === filter)
+  const filtered = filter === 'all' ? rooms.filter(r => r.status !== 'CANCELADA') : rooms.filter(r => r.status === filter)
   return (
     <div>
       <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
-        <h1 className="text-3xl font-bold text-white">Salas ({rooms.length})</h1>
+        <h1 className="text-3xl font-bold text-white">Salas ({filtered.length})</h1>
         <div className="flex gap-1 flex-wrap">
           {['all','ABERTA','EMPARELHADA','EM_ANDAMENTO','FINALIZADA','EM_CONFLITO','EM_DISPUTA','CANCELADA'].map(s => (
             <Button key={s} size="sm" variant={filter === s ? 'default' : 'outline'} onClick={() => setFilter(s)} className={filter === s ? 'bg-purple-600' : 'border-zinc-700 text-zinc-300'}>{s === 'all' ? 'Todas' : s}</Button>
