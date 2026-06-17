@@ -1888,6 +1888,7 @@ function Dashboard({ me, onLogout, refreshMe }) {
   const [view, setView] = useState(sp.get('view') || 'rooms')
   const [rooms, setRooms] = useState([])
   const [myRooms, setMyRooms] = useState([])
+  const [arenaTourn, setArenaTourn] = useState([])
   const [openRoom, setOpenRoom] = useState(sp.get('id') || null)
   const [createOpen, setCreateOpen] = useState(false)
   const [stripeEnabled, setStripeEnabled] = useState(false)
@@ -1908,8 +1909,9 @@ function Dashboard({ me, onLogout, refreshMe }) {
 
   const load = useCallback(async () => {
     try {
-      const [r, mr] = await Promise.all([api('/rooms'), api('/rooms/mine')])
+      const [r, mr, tr] = await Promise.all([api('/rooms'), api('/rooms/mine'), api('/tournaments')])
       setRooms(r.rooms)
+      setArenaTourn((tr.tournaments || []).filter(t => t.status === 'ABERTO' || t.status === 'EM_ANDAMENTO'))
       // Detect transitions: ABERTA → EMPARELHADA on rooms I created
       setMyRooms(prev => {
         for (const newR of mr.rooms) {
@@ -1965,6 +1967,40 @@ function Dashboard({ me, onLogout, refreshMe }) {
                 <Button onClick={() => setCreateOpen(true)} className="shrink-0 bg-gradient-to-r from-yellow-500 to-orange-500 hover:opacity-90 text-black font-black h-10">
                   <Zap className="w-4 h-4 mr-1" /> Quero o bónus
                 </Button>
+              </div>
+            </div>
+          )}
+          {arenaTourn.length > 0 && (
+            <div>
+              <h3 className="text-sm font-bold uppercase tracking-wider text-yellow-400 mb-2">🏆 Torneios</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {arenaTourn.map(t => {
+                  const totalPot = (t.entryFeeCents * t.maxPlayers) / 100
+                  const prize1 = (totalPot * 0.8 * 0.875).toFixed(2)
+                  const isOpen = t.status === 'ABERTO'
+                  return (
+                    <Card key={t.id} className="glow-card border-yellow-500/30 p-4 cursor-pointer hover:scale-[1.01] transition" onClick={() => setViewClean('tournaments')}>
+                      <div className="flex items-start justify-between gap-2 mb-2">
+                        <div>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-black text-base">{t.name}</span>
+                            <Badge variant="outline" className={`text-xs border-0 ${isOpen ? 'bg-green-500/15 text-green-300' : 'bg-purple-500/15 text-purple-300'}`}>{isOpen ? 'Aberto' : 'Em andamento'}</Badge>
+                          </div>
+                          {(t.mode || t.platform) && <div className="text-xs text-muted-foreground mt-0.5">{[t.mode, t.platform].filter(Boolean).join(' · ')}</div>}
+                        </div>
+                        <div className="text-right shrink-0">
+                          <div className="text-xl font-black text-yellow-300">{t.entryFeeCents > 0 ? `${(t.entryFeeCents/100).toFixed(2)}€` : 'GRÁTIS'}</div>
+                          <div className="text-xs text-muted-foreground">entrada</div>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-3 gap-2 text-center text-xs mt-2">
+                        <div className="glow-card rounded p-1.5"><div className="text-muted-foreground">Jogadores</div><div className="font-bold">{t.currentPlayers}/{t.maxPlayers}</div></div>
+                        <div className="glow-card rounded p-1.5"><div className="text-muted-foreground">1º Lugar</div><div className="font-bold text-yellow-300">{prize1}€</div></div>
+                        <div className="glow-card rounded p-1.5"><div className="text-muted-foreground">Servidor</div><div className="font-bold">{t.server || '-'}</div></div>
+                      </div>
+                    </Card>
+                  )
+                })}
               </div>
             </div>
           )}
