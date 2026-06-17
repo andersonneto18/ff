@@ -1005,6 +1005,7 @@ function WalletView({ refreshMe, stripeEnabled }) {
   const [topupAmount, setTopupAmount] = useState('10')
   const [topupMethod, setTopupMethod] = useState('mbway')
   const [mbwayPhone, setMbwayPhone] = useState(null)
+  const [platformIban, setPlatformIban] = useState(null)
   const [mbwayProof, setMbwayProof] = useState(null)
   const [mbwayTopups, setMbwayTopups] = useState([])
   const [form, setForm] = useState({ amountEuros: '10' })
@@ -1033,7 +1034,7 @@ function WalletView({ refreshMe, stripeEnabled }) {
     return () => clearInterval(i)
   }, [load, loadMethod, loadMbwayTopups])
   useEffect(() => {
-    fetch('/api/platform-status').then(r => r.json()).then(d => setMbwayPhone(d.mbwayPhone || null)).catch(() => {})
+    fetch('/api/platform-status').then(r => r.json()).then(d => { setMbwayPhone(d.mbwayPhone || null); setPlatformIban(d.platformIban || null) }).catch(() => {})
   }, [])
 
   // Auto-open topup if redirected with ?topup=cents
@@ -1288,22 +1289,37 @@ function WalletView({ refreshMe, stripeEnabled }) {
               )
             ) : (
               <div className="space-y-3">
-                {mbwayPhone ? (
-                  <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-4">
-                    <div className="text-xs text-zinc-400 mb-1">Envia {parseFloat(topupAmount||0).toFixed(2)}€ para o número MB WAY:</div>
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="text-2xl font-black text-blue-300 tracking-wider">{mbwayPhone}</div>
-                      <button onClick={() => { navigator.clipboard?.writeText(mbwayPhone); toast.success('Número copiado!') }} className="flex items-center gap-1 text-xs text-zinc-400 hover:text-white bg-zinc-800 px-2 py-1 rounded">
-                        <Copy className="w-3.5 h-3.5" /> Copiar
-                      </button>
-                    </div>
+                {mbwayPhone || platformIban ? (
+                  <div className="space-y-2">
+                    {mbwayPhone && (
+                      <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-4">
+                        <div className="text-xs text-zinc-400 mb-1">Envia {parseFloat(topupAmount||0).toFixed(2)}€ para o número MB WAY:</div>
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="text-2xl font-black text-blue-300 tracking-wider">{mbwayPhone}</div>
+                          <button onClick={() => { navigator.clipboard?.writeText(mbwayPhone); toast.success('Número copiado!') }} className="flex items-center gap-1 text-xs text-zinc-400 hover:text-white bg-zinc-800 px-2 py-1 rounded">
+                            <Copy className="w-3.5 h-3.5" /> Copiar
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                    {platformIban && (
+                      <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-lg p-4">
+                        <div className="text-xs text-zinc-400 mb-1">Ou envia {parseFloat(topupAmount||0).toFixed(2)}€ por transferência bancária para o IBAN:</div>
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="text-base font-black text-emerald-300 tracking-wider">{platformIban}</div>
+                          <button onClick={() => { navigator.clipboard?.writeText(platformIban); toast.success('IBAN copiado!') }} className="flex items-center gap-1 text-xs text-zinc-400 hover:text-white bg-zinc-800 px-2 py-1 rounded">
+                            <Copy className="w-3.5 h-3.5" /> Copiar
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 ) : (
                   <div className="text-sm text-yellow-300 bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-3">
                     Carregamento via MB WAY não disponível de momento.
                   </div>
                 )}
-                {mbwayPhone && (
+                {(mbwayPhone || platformIban) && (
                   <>
                     <div>
                       <Label className="text-zinc-300">Comprovativo de pagamento (foto, screenshot ou PDF)</Label>

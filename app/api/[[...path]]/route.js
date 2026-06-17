@@ -111,7 +111,7 @@ async function handleRoute(request, { params }) {
     if (route === '/platform-status' && method === 'GET') {
       const rows = await db.collection('platform_settings').find({}).toArray()
       const map = Object.fromEntries(rows.map(s => [s.key, s.value]))
-      return J({ topupsEnabled: map.topupsEnabled !== '0', stripeEnabled: map.stripeEnabled !== '0', mbwayPhone: map.mbwayPhone || null, commissionPercent: Math.round(COMMISSION * 100) })
+      return J({ topupsEnabled: map.topupsEnabled !== '0', stripeEnabled: map.stripeEnabled !== '0', mbwayPhone: map.mbwayPhone || null, platformIban: map.platformIban || null, commissionPercent: Math.round(COMMISSION * 100) })
     }
 
     // ===== AUTH =====
@@ -670,7 +670,7 @@ async function handleRoute(request, { params }) {
       if (route === '/admin/settings' && method === 'GET') {
         const rows = await db.collection('platform_settings').find({}).toArray()
         const map = Object.fromEntries(rows.map(s => [s.key, s.value]))
-        return J({ topupsEnabled: map.topupsEnabled !== '0', stripeEnabled: map.stripeEnabled !== '0', mbwayPhone: map.mbwayPhone || null })
+        return J({ topupsEnabled: map.topupsEnabled !== '0', stripeEnabled: map.stripeEnabled !== '0', mbwayPhone: map.mbwayPhone || null, platformIban: map.platformIban || null })
       }
 
       if (route === '/admin/settings' && method === 'POST') {
@@ -705,9 +705,19 @@ async function handleRoute(request, { params }) {
           }
           await logAudit(db, admin, 'mbway_phone_updated', 'platform', 'settings', phone)
         }
+        if (typeof body.platformIban !== 'undefined') {
+          const iban = (body.platformIban || '').trim()
+          const existing = await db.collection('platform_settings').findOne({ key: 'platformIban' })
+          if (existing) {
+            await db.collection('platform_settings').updateOne({ key: 'platformIban' }, { $set: { value: iban } })
+          } else {
+            await db.collection('platform_settings').insertOne({ key: 'platformIban', value: iban })
+          }
+          await logAudit(db, admin, 'platform_iban_updated', 'platform', 'settings', iban)
+        }
         const updated = await db.collection('platform_settings').find({}).toArray()
         const map = Object.fromEntries(updated.map(s => [s.key, s.value]))
-        return J({ success: true, topupsEnabled: map.topupsEnabled !== '0', stripeEnabled: map.stripeEnabled !== '0', mbwayPhone: map.mbwayPhone || null })
+        return J({ success: true, topupsEnabled: map.topupsEnabled !== '0', stripeEnabled: map.stripeEnabled !== '0', mbwayPhone: map.mbwayPhone || null, platformIban: map.platformIban || null })
       }
 
       if (route === '/admin/dashboard' && method === 'GET') {

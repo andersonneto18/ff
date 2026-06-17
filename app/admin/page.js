@@ -101,6 +101,9 @@ function DashboardSection() {
   const [mbwayPhone, setMbwayPhone] = useState('')
   const [mbwayPhoneInput, setMbwayPhoneInput] = useState('')
   const [savingPhone, setSavingPhone] = useState(false)
+  const [platformIban, setPlatformIban] = useState('')
+  const [platformIbanInput, setPlatformIbanInput] = useState('')
+  const [savingIban, setSavingIban] = useState(false)
 
   useEffect(() => {
     api('/admin/settings').then(s => {
@@ -108,6 +111,8 @@ function DashboardSection() {
       setStripeEnabled(s.stripeEnabled)
       setMbwayPhone(s.mbwayPhone || '')
       setMbwayPhoneInput(s.mbwayPhone || '')
+      setPlatformIban(s.platformIban || '')
+      setPlatformIbanInput(s.platformIban || '')
     }).catch(() => {})
   }, [])
 
@@ -139,6 +144,16 @@ function DashboardSection() {
       toast.success(res.mbwayPhone ? `Número MB WAY guardado: ${res.mbwayPhone}` : 'Número MB WAY removido')
     } catch (e) { toast.error(e.message) }
     finally { setSavingPhone(false) }
+  }
+
+  const saveIban = async () => {
+    setSavingIban(true)
+    try {
+      const res = await api('/admin/settings', { method: 'POST', body: JSON.stringify({ platformIban: platformIbanInput }) })
+      setPlatformIban(res.platformIban || '')
+      toast.success(res.platformIban ? `IBAN guardado: ${res.platformIban}` : 'IBAN removido')
+    } catch (e) { toast.error(e.message) }
+    finally { setSavingIban(false) }
   }
 
   useEffect(() => { api('/admin/dashboard').then(setStats).catch(e => toast.error(e.message)); const i = setInterval(() => api('/admin/dashboard').then(setStats).catch(() => {}), 8000); return () => clearInterval(i) }, [])
@@ -192,34 +207,62 @@ function DashboardSection() {
         ))}
       </div>
 
-      {/* MB WAY settings card */}
-      <Card className="mt-4 bg-zinc-900 border-blue-500/30 p-5">
-        <div className="flex items-center gap-2 mb-4">
-          <Smartphone className="w-5 h-5 text-blue-400" />
-          <span className="font-bold text-white text-sm">Configuração MB WAY</span>
-          <span className="text-xs text-zinc-500">— número para onde os jogadores enviam os carregamentos</span>
-        </div>
-        <div className="flex gap-3 flex-wrap items-end">
-          <div className="flex-1 min-w-[200px]">
-            <label className="text-xs text-zinc-400 mb-1 block">Número MB WAY da plataforma</label>
-            <input
-              type="text"
-              value={mbwayPhoneInput}
-              onChange={e => setMbwayPhoneInput(e.target.value)}
-              placeholder="9XX XXX XXX"
-              className="w-full bg-zinc-800 border border-zinc-700 text-white rounded-md px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
-            />
+      {/* MB WAY + IBAN settings */}
+      <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+        <Card className="bg-zinc-900 border-blue-500/30 p-5">
+          <div className="flex items-center gap-2 mb-4">
+            <Smartphone className="w-5 h-5 text-blue-400" />
+            <span className="font-bold text-white text-sm">Configuração MB WAY</span>
           </div>
-          <Button onClick={saveMbwayPhone} disabled={savingPhone} className="bg-blue-600 hover:bg-blue-700 shrink-0">
-            {savingPhone ? 'A guardar...' : 'Guardar'}
-          </Button>
-          {mbwayPhone && (
-            <div className="text-xs text-green-300 flex items-center gap-1">
-              <CheckCircle2 className="w-3.5 h-3.5" /> Activo: {mbwayPhone}
+          <div className="flex gap-3 flex-wrap items-end">
+            <div className="flex-1 min-w-[200px]">
+              <label className="text-xs text-zinc-400 mb-1 block">Número MB WAY da plataforma</label>
+              <input
+                type="text"
+                value={mbwayPhoneInput}
+                onChange={e => setMbwayPhoneInput(e.target.value)}
+                placeholder="9XX XXX XXX"
+                className="w-full bg-zinc-800 border border-zinc-700 text-white rounded-md px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
+              />
             </div>
-          )}
-        </div>
-      </Card>
+            <Button onClick={saveMbwayPhone} disabled={savingPhone} className="bg-blue-600 hover:bg-blue-700 shrink-0">
+              {savingPhone ? 'A guardar...' : 'Guardar'}
+            </Button>
+            {mbwayPhone && (
+              <div className="text-xs text-green-300 flex items-center gap-1 w-full">
+                <CheckCircle2 className="w-3.5 h-3.5" /> Activo: {mbwayPhone}
+              </div>
+            )}
+          </div>
+        </Card>
+
+        <Card className="bg-zinc-900 border-emerald-500/30 p-5">
+          <div className="flex items-center gap-2 mb-4">
+            <Landmark className="w-5 h-5 text-emerald-400" />
+            <span className="font-bold text-white text-sm">Configuração IBAN</span>
+          </div>
+          <div className="flex gap-3 flex-wrap items-end">
+            <div className="flex-1 min-w-[200px]">
+              <label className="text-xs text-zinc-400 mb-1 block">IBAN da plataforma</label>
+              <input
+                type="text"
+                value={platformIbanInput}
+                onChange={e => setPlatformIbanInput(e.target.value)}
+                placeholder="PT50 XXXX XXXX XXXX XXXX XXXX X"
+                className="w-full bg-zinc-800 border border-zinc-700 text-white rounded-md px-3 py-2 text-sm focus:outline-none focus:border-emerald-500"
+              />
+            </div>
+            <Button onClick={saveIban} disabled={savingIban} className="bg-emerald-600 hover:bg-emerald-700 shrink-0">
+              {savingIban ? 'A guardar...' : 'Guardar'}
+            </Button>
+            {platformIban && (
+              <div className="text-xs text-green-300 flex items-center gap-1 w-full">
+                <CheckCircle2 className="w-3.5 h-3.5" /> Activo: {platformIban}
+              </div>
+            )}
+          </div>
+        </Card>
+      </div>
 
       {/* Profit breakdown card */}
       <Card className="mt-4 bg-zinc-900 border-emerald-500/30 p-5 relative overflow-hidden">
