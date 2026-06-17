@@ -248,11 +248,15 @@ async function handleRoute(request, { params }) {
         if (balance < betCents) {
           return J({ error: 'Saldo insuficiente', needTopup: true, balanceCents: balance, requiredCents: betCents, missingCents: betCents - balance }, 402)
         }
+        // Atomic claim: only succeeds if room is still ABERTA with no opponent
+        const claimed = await db.collection('rooms').updateOne(
+          { id: roomId, status: 'ABERTA', opponentId: { $isNull: true } },
+          { $set: { status: 'EMPARELHADA', opponentId: user.id, opponentPaid: true, opponentPaidAt: new Date() } }
+        )
+        if (claimed.affectedRows === 0) return ERR('Sala já foi preenchida por outro jogador')
+        // Room secured — now debit balance
         const newBalance = balance - betCents
         await db.collection('users').updateOne({ id: user.id }, { $set: { balanceCents: newBalance } })
-        await db.collection('rooms').updateOne({ id: roomId }, {
-          $set: { status: 'EMPARELHADA', opponentId: user.id, opponentPaid: true, opponentPaidAt: new Date() }
-        })
         await db.collection('transactions').insertOne({
           id: uuidv4(), userId: user.id, type: 'bet_join', amountCents: -betCents,
           roomId: room.id, balance: newBalance, description: `Aposta entrar sala ${room.id.slice(0,8)}`,
