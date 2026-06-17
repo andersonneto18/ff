@@ -172,7 +172,7 @@ async function handleRoute(request, { params }) {
       const b = await request.json()
       const { betEuros, mode, roomType, scheduledTime, server, weapons, platform, notes } = b
       const betEurNum = parseFloat(betEuros)
-      if (!betEurNum || betEurNum < 2 || betEurNum > 500) return ERR('Valor de aposta inválido (mínimo 2€, máximo 500€)')
+      if (!betEurNum || betEurNum < 1 || betEurNum > 500) return ERR('Valor de aposta inválido (mínimo 1€, máximo 500€)')
       if (!mode || !server || !weapons || !platform || !roomType) return ERR('Preenche todos os campos obrigatórios')
       const betCents = Math.round(betEurNum * 100)
       // Check internal balance
