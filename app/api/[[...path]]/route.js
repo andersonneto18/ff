@@ -672,8 +672,23 @@ async function handleRoute(request, { params }) {
         const userIds = participants.map(p => p.userId)
         const users = await db.collection('users').find({ id: { $in: userIds } }).toArray()
         const umap = Object.fromEntries(users.map(u => [u.id, { id: u.id, name: u.name, ffNickname: u.ffNickname, photoUrl: u.photoUrl, wins: u.wins, losses: u.losses }]))
-        const matches = await db.collection('tournament_matches').find({ tournamentId: tId }).sort({ round: 1 }).toArray()
-        return J({ tournament: clean(tournament), participants: participants.map(p => ({ ...clean(p), user: umap[p.userId] })), matches: matches.map(clean), umap })
+        let matches = await db.collection('tournament_matches').find({ tournamentId: tId }).sort({ round: 1 }).toArray()
+        // Auto-timeout: if one player claimed and opponent didn't respond in 2h, auto-advance claimer
+        const TIMEOUT_MS = 2 * 60 * 60 * 1000
+        for (const m of matches) {
+          if (m.status !== 'PENDENTE' || !m.firstClaimAt) continue
+          const oneClaimed = (m.claim1 && !m.claim2) || (!m.claim1 && m.claim2)
+          if (!oneClaimed) continue
+          if (Date.now() - new Date(m.firstClaimAt).getTime() < TIMEOUT_MS) continue
+          const claimerId = m.claim1 ? m.player1Id : m.player2Id
+          const claim = m.claim1 || m.claim2
+          const winnerId = claim === 'win' ? claimerId : (claimerId === m.player1Id ? m.player2Id : m.player1Id)
+          const tFresh = await db.collection('tournaments').findOne({ id: tId })
+          await finalizeTournamentMatch(db, tFresh, m, winnerId)
+        }
+        matches = await db.collection('tournament_matches').find({ tournamentId: tId }).sort({ round: 1 }).toArray()
+        const tFinal = await db.collection('tournaments').findOne({ id: tId })
+        return J({ tournament: clean(tFinal), participants: participants.map(p => ({ ...clean(p), user: umap[p.userId] })), matches: matches.map(clean), umap })
       }
 
       if (tAction === 'join' && method === 'POST') {
@@ -745,6 +760,7 @@ async function handleRoute(request, { params }) {
         const { result } = await request.json()
         if (!['win', 'loss'].includes(result)) return ERR('Resultado inválido')
         const update = isP1 ? { claim1: result } : { claim2: result }
+        if (!match.firstClaimAt) update.firstClaimAt = new Date()
         await db.collection('tournament_matches').updateOne({ id: matchId }, { $set: update })
         const updated = await db.collection('tournament_matches').findOne({ id: matchId })
         if (updated.claim1 && updated.claim2) {
