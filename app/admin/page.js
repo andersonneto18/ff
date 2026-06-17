@@ -94,6 +94,8 @@ function AdminLogin({ onSuccess }) {
 // -------- DASHBOARD --------
 function DashboardSection() {
   const [stats, setStats] = useState(null)
+  const [bonusEligible, setBonusEligible] = useState([])
+  const [creditingBonus, setCreditingBonus] = useState(null)
   const [topupsEnabled, setTopupsEnabled] = useState(true)
   const [togglingTopups, setTogglingTopups] = useState(false)
   const [stripeEnabled, setStripeEnabled] = useState(true)
@@ -157,6 +159,7 @@ function DashboardSection() {
   }
 
   useEffect(() => { api('/admin/dashboard').then(setStats).catch(e => toast.error(e.message)); const i = setInterval(() => api('/admin/dashboard').then(setStats).catch(() => {}), 8000); return () => clearInterval(i) }, [])
+  useEffect(() => { api('/admin/bonus-eligible').then(d => setBonusEligible(d.eligible || [])).catch(() => {}) }, [])
   const cards = [
     { label: 'Total Jogadores', v: stats?.totalUsers, I: Users, color: 'from-purple-500 to-blue-500' },
     { label: 'Salas em Jogo', v: stats?.inProgress, I: Activity, color: 'from-blue-500 to-cyan-500' },
@@ -263,6 +266,42 @@ function DashboardSection() {
           </div>
         </Card>
       </div>
+
+      {/* Bonus eligible card */}
+      <Card className="mt-4 bg-zinc-900 border-yellow-500/30 p-5">
+        <div className="flex items-center gap-2 mb-4">
+          <span className="text-xl">🎁</span>
+          <span className="font-bold text-white text-sm">Bónus de Boas-Vindas — Primeiros 3 Jogadores</span>
+        </div>
+        {bonusEligible.length === 0 ? (
+          <div className="text-sm text-zinc-500">Ainda nenhuma partida finalizada.</div>
+        ) : (
+          <div className="space-y-2">
+            {bonusEligible.map((e, i) => (
+              <div key={e.userId} className="flex items-center justify-between gap-3 bg-zinc-800/60 rounded-lg px-4 py-3">
+                <div className="flex items-center gap-3">
+                  <div className={`w-7 h-7 rounded-full flex items-center justify-center font-black text-sm ${i === 0 ? 'bg-yellow-500 text-black' : i === 1 ? 'bg-zinc-400 text-black' : 'bg-amber-700 text-white'}`}>{i + 1}º</div>
+                  <div>
+                    <div className="text-sm font-bold text-white">{e.user?.ffNickname || e.user?.name}</div>
+                    <div className="text-xs text-zinc-500">{e.user?.email} · {new Date(e.finishedAt).toLocaleString('pt-PT')}</div>
+                  </div>
+                </div>
+                <Button size="sm" disabled={creditingBonus === e.userId} onClick={async () => {
+                  if (!window.confirm(`Creditar 1€ de bónus a ${e.user?.ffNickname}?`)) return
+                  setCreditingBonus(e.userId)
+                  try {
+                    await api('/admin/bonus-credit', { method: 'POST', body: JSON.stringify({ userId: e.userId, amountCents: 100 }) })
+                    toast.success(`1€ creditado a ${e.user?.ffNickname}!`)
+                  } catch (err) { toast.error(err.message) }
+                  finally { setCreditingBonus(null) }
+                }} className="bg-yellow-500 hover:bg-yellow-600 text-black font-bold shrink-0">
+                  {creditingBonus === e.userId ? '...' : 'Creditar 1€'}
+                </Button>
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
 
       {/* Profit breakdown card */}
       <Card className="mt-4 bg-zinc-900 border-emerald-500/30 p-5 relative overflow-hidden">

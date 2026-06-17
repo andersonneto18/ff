@@ -940,6 +940,43 @@ async function handleRoute(request, { params }) {
         }
       }
 
+      if (route === '/admin/bonus-eligible' && method === 'GET') {
+        // First 3 unique players (creators) whose rooms were finalized, ordered by finishedAt
+        const finalized = await db.collection('rooms')
+          .find({ status: 'FINALIZADA' })
+          .sort({ finishedAt: 1 })
+          .limit(200)
+          .toArray()
+        const seen = []
+        for (const r of finalized) {
+          if (!seen.find(s => s.userId === r.creatorId)) {
+            seen.push({ userId: r.creatorId, roomId: r.id, finishedAt: r.finishedAt })
+          }
+          if (seen.length === 3) break
+        }
+        const ids = seen.map(s => s.userId)
+        const users = await db.collection('users').find({ id: { $in: ids } }).toArray()
+        const umap = Object.fromEntries(users.map(u => [u.id, u]))
+        return J({ eligible: seen.map(s => ({ ...s, user: sanitizeUser(umap[s.userId]) })) })
+      }
+
+      if (route === '/admin/bonus-credit' && method === 'POST') {
+        const { userId, amountCents } = await request.json()
+        if (!userId || !amountCents) return ERR('userId e amountCents obrigatórios')
+        const target = await db.collection('users').findOne({ id: userId })
+        if (!target) return ERR('Utilizador não encontrado', 404)
+        const newBalance = (target.balanceCents || 0) + amountCents
+        await db.collection('users').updateOne({ id: userId }, { $set: { balanceCents: newBalance } })
+        await db.collection('transactions').insertOne({
+          id: uuidv4(), userId, type: 'bonus', amountCents,
+          balance: newBalance, description: `Bónus de boas-vindas`, createdAt: new Date(),
+        })
+        await createNotification(db, userId, 'bonus', '🎁 Bónus creditado!',
+          `Parabéns! Recebeste um bónus de ${(amountCents/100).toFixed(2)}€ na tua conta.`)
+        await logAudit(db, admin, 'bonus_credited', 'user', userId, `${(amountCents/100).toFixed(2)}eur`)
+        return J({ ok: true, newBalance })
+      }
+
       if (route === '/admin/support' && method === 'GET') {
         const msgs = await db.collection('support_messages').find({}).sort({ createdAt: -1 }).limit(500).toArray()
         const userIds = [...new Set(msgs.map(m => m.userId))]
