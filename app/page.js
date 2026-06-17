@@ -1523,6 +1523,171 @@ function SupportChat({ me }) {
   )
 }
 
+function TournamentsView({ me }) {
+  const api = useApi()
+  const [list, setList] = useState([])
+  const [selected, setSelected] = useState(null)
+  const [details, setDetails] = useState(null)
+  const [busy, setBusy] = useState(false)
+
+  const load = useCallback(async () => {
+    try { const d = await api('/tournaments'); setList(d.tournaments || []) } catch (e) {}
+  }, [api])
+
+  const loadDetails = useCallback(async (id) => {
+    try { const d = await api(`/tournaments/${id}`); setDetails(d) } catch (e) {}
+  }, [api])
+
+  useEffect(() => { load(); const i = setInterval(load, 5000); return () => clearInterval(i) }, [load])
+  useEffect(() => { if (selected) loadDetails(selected) }, [selected, loadDetails])
+
+  const join = async (t) => {
+    setBusy(true)
+    try {
+      await api(`/tournaments/${t.id}/join`, { method: 'POST', body: '{}' })
+      toast.success(`Inscrito no torneio "${t.name}"!`)
+      load(); if (selected === t.id) loadDetails(t.id)
+    } catch (e) { toast.error(e.message) } finally { setBusy(false) }
+  }
+
+  const claim = async (tId, matchId, result) => {
+    setBusy(true)
+    try {
+      await api(`/tournaments/${tId}/match/${matchId}/claim`, { method: 'POST', body: JSON.stringify({ result }) })
+      toast.success('Resultado submetido!')
+      loadDetails(tId)
+    } catch (e) { toast.error(e.message) } finally { setBusy(false) }
+  }
+
+  const STATUS_LABEL = { ABERTO: { l: 'Inscrições abertas', cls: 'bg-green-500/20 text-green-300' }, EM_ANDAMENTO: { l: 'Em andamento', cls: 'bg-purple-500/20 text-purple-300' }, FINALIZADO: { l: 'Finalizado', cls: 'bg-zinc-500/20 text-zinc-400' } }
+
+  const myMatch = (matches) => matches?.find(m => m.status === 'PENDENTE' && (m.player1Id === me?.id || m.player2Id === me?.id))
+  const myConflict = (matches) => matches?.find(m => m.status === 'EM_CONFLITO' && (m.player1Id === me?.id || m.player2Id === me?.id))
+
+  return (
+    <div className="space-y-6">
+      <div><h1 className="text-3xl font-black gradient-text">Torneios</h1><p className="text-sm text-muted-foreground">Inscreve-te, elimina os adversários e leva o prémio</p></div>
+
+      {list.length === 0 && <Card className="glow-card p-8 text-center text-muted-foreground">Sem torneios disponíveis de momento. Volta mais tarde!</Card>}
+
+      <div className="space-y-4">
+        {list.map(t => {
+          const st = STATUS_LABEL[t.status] || { l: t.status, cls: '' }
+          const isJoined = details?.participants?.some(p => p.userId === me?.id)
+          const totalPot = (t.entryFeeCents * t.maxPlayers) / 100
+          const prize1 = (totalPot * 0.8 * 0.875).toFixed(2)
+          const prize2 = (totalPot * 0.8 * 0.125).toFixed(2)
+
+          return (
+            <Card key={t.id} className="glow-card border-purple-500/20 p-5">
+              <div className="flex items-start justify-between gap-3 mb-3 flex-wrap">
+                <div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h3 className="font-black text-lg">{t.name}</h3>
+                    <Badge variant="outline" className={`${st.cls} border-0 text-xs`}>{st.l}</Badge>
+                  </div>
+                  {t.description && <p className="text-sm text-muted-foreground mt-0.5">{t.description}</p>}
+                </div>
+                <div className="text-right shrink-0">
+                  <div className="text-2xl font-black text-yellow-300">{t.entryFeeCents > 0 ? `${(t.entryFeeCents/100).toFixed(2)}€` : 'GRÁTIS'}</div>
+                  <div className="text-xs text-muted-foreground">entrada</div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-2 mb-4 text-center">
+                <div className="glow-card rounded-lg p-2"><div className="text-xs text-muted-foreground">Jogadores</div><div className="font-bold">{t.currentPlayers}/{t.maxPlayers}</div></div>
+                <div className="glow-card rounded-lg p-2"><div className="text-xs text-muted-foreground">1º Lugar</div><div className="font-bold text-yellow-300">{prize1}€</div></div>
+                <div className="glow-card rounded-lg p-2"><div className="text-xs text-muted-foreground">2º Lugar</div><div className="font-bold text-zinc-300">{prize2}€</div></div>
+              </div>
+
+              <div className="flex gap-2 flex-wrap">
+                {t.status === 'ABERTO' && !isJoined && (
+                  <Button disabled={busy} onClick={() => join(t)} className="bg-gradient-to-r from-yellow-500 to-orange-500 text-black font-bold">
+                    <Trophy className="w-4 h-4 mr-2" /> Inscrever {t.entryFeeCents > 0 ? `(${(t.entryFeeCents/100).toFixed(2)}€)` : '(Grátis)'}
+                  </Button>
+                )}
+                {isJoined && t.status === 'ABERTO' && <Badge className="bg-green-500/20 text-green-300">✓ Inscrito — aguarda o início</Badge>}
+                <Button variant="outline" size="sm" onClick={() => { setSelected(selected === t.id ? null : t.id); if (selected !== t.id) loadDetails(t.id) }} className="border-purple-500/40">
+                  {selected === t.id ? 'Fechar' : 'Ver bracket'}
+                </Button>
+              </div>
+
+              {selected === t.id && details && (
+                <div className="mt-4 pt-4 border-t border-purple-500/20 space-y-4">
+                  {(() => {
+                    const active = myMatch(details.matches)
+                    const conflict = myConflict(details.matches)
+                    if (active) {
+                      const oppId = active.player1Id === me?.id ? active.player2Id : active.player1Id
+                      const opp = details.umap?.[oppId]
+                      const myClaim = active.player1Id === me?.id ? active.claim1 : active.claim2
+                      return (
+                        <div className="bg-purple-500/10 border border-purple-500/30 rounded-xl p-4">
+                          <div className="font-bold text-purple-300 mb-2">⚔️ O teu duelo — Ronda {active.round}</div>
+                          <div className="flex items-center gap-3 mb-3">
+                            <Avatar className="w-10 h-10"><AvatarImage src={opp?.photoUrl} /><AvatarFallback>{opp?.ffNickname?.[0]}</AvatarFallback></Avatar>
+                            <div><div className="font-bold">{opp?.ffNickname}</div><div className="text-xs text-muted-foreground">{opp?.wins}V {opp?.losses}D</div></div>
+                          </div>
+                          {!myClaim ? (
+                            <div className="grid grid-cols-2 gap-2">
+                              <Button onClick={() => claim(t.id, active.id, 'win')} disabled={busy} className="bg-green-600 hover:bg-green-700 font-bold"><Trophy className="w-4 h-4 mr-1" /> Eu Ganhei</Button>
+                              <Button onClick={() => claim(t.id, active.id, 'loss')} disabled={busy} variant="destructive" className="font-bold"><XCircle className="w-4 h-4 mr-1" /> Eu Perdi</Button>
+                            </div>
+                          ) : (
+                            <div className="text-center text-sm text-muted-foreground glow-card p-3 rounded-lg">A aguardar resposta do adversário...</div>
+                          )}
+                        </div>
+                      )
+                    }
+                    if (conflict) return (
+                      <div className="bg-orange-500/10 border border-orange-500/30 rounded-xl p-4 text-center">
+                        <AlertTriangle className="w-6 h-6 text-orange-300 mx-auto mb-1" />
+                        <div className="font-bold text-orange-300">Resultado em conflito</div>
+                        <div className="text-xs text-muted-foreground mt-1">O administrador irá resolver o teu duelo.</div>
+                      </div>
+                    )
+                    return null
+                  })()}
+
+                  {[...new Set((details.matches || []).map(m => m.round))].map(round => (
+                    <div key={round}>
+                      <div className="text-xs font-bold text-purple-300 uppercase mb-2">Ronda {round}</div>
+                      <div className="space-y-1">
+                        {(details.matches || []).filter(m => m.round === round).map(m => {
+                          const p1 = details.umap?.[m.player1Id]; const p2 = details.umap?.[m.player2Id]
+                          const isMine = m.player1Id === me?.id || m.player2Id === me?.id
+                          return (
+                            <div key={m.id} className={`flex items-center gap-2 text-sm p-2.5 rounded-lg ${isMine ? 'bg-purple-500/15 border border-purple-500/30' : 'bg-muted/20'}`}>
+                              <span className={m.winnerId === m.player1Id ? 'font-bold text-green-300' : m.winnerId ? 'text-muted-foreground line-through' : ''}>{p1?.ffNickname || '?'}</span>
+                              <span className="text-muted-foreground text-xs">vs</span>
+                              <span className={m.winnerId === m.player2Id ? 'font-bold text-green-300' : m.winnerId ? 'text-muted-foreground line-through' : ''}>{p2?.ffNickname || '?'}</span>
+                              <span className="ml-auto text-xs">
+                                {m.status === 'FINALIZADA' && <span className="text-green-400">✓</span>}
+                                {m.status === 'EM_CONFLITO' && <span className="text-orange-300">⚠</span>}
+                              </span>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  ))}
+
+                  {t.status === 'FINALIZADO' && details.tournament?.winnerId && (
+                    <div className="text-center py-2">
+                      <div className="text-2xl mb-1">🏆</div>
+                      <div className="font-black text-yellow-300">Campeão: {details.umap?.[details.tournament.winnerId]?.ffNickname}</div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </Card>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 function Ranking() {
   const api = useApi()
   const [type, setType] = useState('wins')
@@ -1576,6 +1741,7 @@ function Shell({ me, onLogout, view, setView, children, stripeEnabled }) {
   const nav = [
     ['rooms', 'Arena', Gamepad2],
     ['mine', 'Salas', Swords],
+    ['tournaments', 'Torneios', Crown],
     ['wallet', 'Carteira', WalletIcon],
     ['ranking', 'Ranking', Trophy],
     ['profile', 'Perfil', Users],
@@ -1794,6 +1960,7 @@ function Dashboard({ me, onLogout, refreshMe }) {
           )}
         </div>
       )}
+      {view === 'tournaments' && <TournamentsView me={me} />}
       {view === 'wallet' && <WalletView refreshMe={refreshMe} stripeEnabled={stripeEnabled} />}
       {view === 'ranking' && <Ranking />}
       {view === 'profile' && (

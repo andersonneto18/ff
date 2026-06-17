@@ -641,6 +641,74 @@ async function handleRoute(request, { params }) {
       return J({ withdrawal: clean(w) })
     }
 
+    // ===== TOURNAMENTS =====
+    if (route === '/tournaments' && method === 'GET') {
+      const list = await db.collection('tournaments').find({ status: { $in: ['ABERTO', 'EM_ANDAMENTO'] } }).sort({ createdAt: -1 }).limit(20).toArray()
+      return J({ tournaments: list.map(clean) })
+    }
+
+    const tourMatch = route.match(/^\/tournaments\/([^\/]+)(?:\/(.*))?$/)
+    if (tourMatch && !route.startsWith('/admin/')) {
+      const tId = tourMatch[1]; const tAction = tourMatch[2]
+      const tournament = await db.collection('tournaments').findOne({ id: tId })
+      if (!tournament) return ERR('Torneio não encontrado', 404)
+
+      if (!tAction && method === 'GET') {
+        const participants = await db.collection('tournament_participants').find({ tournamentId: tId }).toArray()
+        const userIds = participants.map(p => p.userId)
+        const users = await db.collection('users').find({ id: { $in: userIds } }).toArray()
+        const umap = Object.fromEntries(users.map(u => [u.id, { id: u.id, name: u.name, ffNickname: u.ffNickname, photoUrl: u.photoUrl, wins: u.wins, losses: u.losses }]))
+        const matches = await db.collection('tournament_matches').find({ tournamentId: tId }).sort({ round: 1 }).toArray()
+        return J({ tournament: clean(tournament), participants: participants.map(p => ({ ...clean(p), user: umap[p.userId] })), matches: matches.map(clean), umap })
+      }
+
+      if (tAction === 'join' && method === 'POST') {
+        const user = await getUserFromRequest(request)
+        if (!user) return ERR('Não autenticado', 401)
+        if (user.banned) return ERR('Conta banida', 403)
+        if (tournament.status !== 'ABERTO') return ERR('Torneio não está aberto para inscrições')
+        if (tournament.currentPlayers >= tournament.maxPlayers) return ERR('Torneio já está cheio')
+        const already = await db.collection('tournament_participants').findOne({ tournamentId: tId, userId: user.id })
+        if (already) return ERR('Já estás inscrito neste torneio')
+        const fee = tournament.entryFeeCents || 0
+        if ((user.balanceCents || 0) < fee) return J({ error: 'Saldo insuficiente', needTopup: true, balanceCents: user.balanceCents, requiredCents: fee }, 402)
+        const newBalance = (user.balanceCents || 0) - fee
+        await db.collection('users').updateOne({ id: user.id }, { $set: { balanceCents: newBalance } })
+        await db.collection('tournament_participants').insertOne({ id: uuidv4(), tournamentId: tId, userId: user.id, eliminatedRound: null, createdAt: new Date() })
+        await db.collection('tournaments').updateOne({ id: tId }, { $inc: { currentPlayers: 1 } })
+        if (fee > 0) await db.collection('transactions').insertOne({ id: uuidv4(), userId: user.id, type: 'tournament_entry', amountCents: -fee, balance: newBalance, description: `Inscrição torneio: ${tournament.name}`, createdAt: new Date() })
+        await createNotification(db, user.id, 'tournament', '🏆 Inscrição confirmada', `Estás inscrito no torneio "${tournament.name}". Aguarda o início!`)
+        return J({ ok: true, balanceCents: newBalance })
+      }
+
+      const matchClaimMatch = tAction?.match(/^match\/([^\/]+)\/claim$/)
+      if (matchClaimMatch && method === 'POST') {
+        const user = await getUserFromRequest(request)
+        if (!user) return ERR('Não autenticado', 401)
+        const matchId = matchClaimMatch[1]
+        const match = await db.collection('tournament_matches').findOne({ id: matchId, tournamentId: tId })
+        if (!match) return ERR('Partida não encontrada', 404)
+        if (match.status !== 'PENDENTE') return ERR('Esta partida já foi decidida')
+        const isP1 = match.player1Id === user.id, isP2 = match.player2Id === user.id
+        if (!isP1 && !isP2) return ERR('Não és participante desta partida', 403)
+        const { result } = await request.json()
+        if (!['win', 'loss'].includes(result)) return ERR('Resultado inválido')
+        const update = isP1 ? { claim1: result } : { claim2: result }
+        await db.collection('tournament_matches').updateOne({ id: matchId }, { $set: update })
+        const updated = await db.collection('tournament_matches').findOne({ id: matchId })
+        if (updated.claim1 && updated.claim2) {
+          if (updated.claim1 === 'win' && updated.claim2 === 'loss') {
+            await finalizeTournamentMatch(db, tournament, updated, updated.player1Id)
+          } else if (updated.claim2 === 'win' && updated.claim1 === 'loss') {
+            await finalizeTournamentMatch(db, tournament, updated, updated.player2Id)
+          } else {
+            await db.collection('tournament_matches').updateOne({ id: matchId }, { $set: { status: 'EM_CONFLITO' } })
+          }
+        }
+        return J({ ok: true })
+      }
+    }
+
     // ===== SUPPORT CHAT =====
     if (route === '/support/messages' && method === 'GET') {
       const user = await getUserFromRequest(request)
@@ -940,6 +1008,99 @@ async function handleRoute(request, { params }) {
         }
       }
 
+      // ===== ADMIN TOURNAMENTS =====
+      if (route === '/admin/tournaments' && method === 'GET') {
+        const list = await db.collection('tournaments').find({}).sort({ createdAt: -1 }).limit(50).toArray()
+        const withCounts = await Promise.all(list.map(async t => {
+          const count = await db.collection('tournament_participants').countDocuments({ tournamentId: t.id })
+          return { ...clean(t), currentPlayers: count }
+        }))
+        return J({ tournaments: withCounts })
+      }
+
+      if (route === '/admin/tournaments' && method === 'POST') {
+        const b = await request.json()
+        const { name, description, entryFeeEuros, maxPlayers } = b
+        if (!name?.trim()) return ERR('Nome obrigatório')
+        const fee = Math.round(parseFloat(entryFeeEuros || 0) * 100)
+        const max = parseInt(maxPlayers) || 8
+        if (![4, 8, 16].includes(max)) return ERR('Máximo de jogadores deve ser 4, 8 ou 16')
+        const t = { id: uuidv4(), name: name.trim(), description: description?.trim() || '', entryFeeCents: fee, maxPlayers: max, currentPlayers: 0, status: 'RASCUNHO', currentRound: 0, winnerId: null, prizeFirstCents: null, prizeSecondCents: null, commissionCents: null, createdAt: new Date(), startedAt: null, finishedAt: null }
+        await db.collection('tournaments').insertOne(t)
+        await logAudit(db, admin, 'tournament_created', 'tournament', t.id, name)
+        return J({ tournament: clean(t) })
+      }
+
+      const adminTourMatch = route.match(/^\/admin\/tournaments\/([^\/]+)(?:\/(.*))?$/)
+      if (adminTourMatch) {
+        const tId = adminTourMatch[1]; const tAction = adminTourMatch[2]
+        const tournament = await db.collection('tournaments').findOne({ id: tId })
+        if (!tournament) return ERR('Torneio não encontrado', 404)
+
+        if (!tAction && method === 'PUT') {
+          const b = await request.json()
+          const upd = {}
+          if (b.name !== undefined) upd.name = b.name.trim()
+          if (b.description !== undefined) upd.description = b.description.trim()
+          if (b.entryFeeEuros !== undefined) upd.entryFeeCents = Math.round(parseFloat(b.entryFeeEuros) * 100)
+          if (b.maxPlayers !== undefined) upd.maxPlayers = parseInt(b.maxPlayers)
+          if (b.status !== undefined && ['RASCUNHO','ABERTO','CANCELADO'].includes(b.status)) upd.status = b.status
+          if (Object.keys(upd).length) await db.collection('tournaments').updateOne({ id: tId }, { $set: upd })
+          await logAudit(db, admin, 'tournament_updated', 'tournament', tId, JSON.stringify(upd))
+          return J({ ok: true })
+        }
+
+        if (tAction === 'start' && method === 'POST') {
+          if (tournament.status !== 'ABERTO') return ERR('Torneio não está aberto')
+          const participants = await db.collection('tournament_participants').find({ tournamentId: tId }).toArray()
+          if (participants.length < 2) return ERR('Mínimo 2 jogadores para iniciar')
+          // Shuffle participants
+          const shuffled = participants.sort(() => Math.random() - 0.5)
+          const totalPot = tournament.entryFeeCents * shuffled.length
+          const commission = Math.round(totalPot * COMMISSION)
+          const prizeFirst = Math.round((totalPot - commission) * 0.875)
+          const prizeSecond = totalPot - commission - prizeFirst
+          await db.collection('tournaments').updateOne({ id: tId }, { $set: { status: 'EM_ANDAMENTO', currentRound: 1, startedAt: new Date(), prizeFirstCents: prizeFirst, prizeSecondCents: prizeSecond, commissionCents: commission } })
+          // Generate round 1 matches
+          for (let i = 0; i < shuffled.length - 1; i += 2) {
+            await db.collection('tournament_matches').insertOne({ id: uuidv4(), tournamentId: tId, round: 1, player1Id: shuffled[i].userId, player2Id: shuffled[i+1].userId, claim1: null, claim2: null, winnerId: null, status: 'PENDENTE', createdAt: new Date(), finishedAt: null })
+          }
+          // Notify participants
+          for (const p of shuffled) await createNotification(db, p.userId, 'tournament', '🏆 Torneio iniciado!', `O torneio "${tournament.name}" começou! Verifica o teu duelo na tab Torneios.`)
+          await logAudit(db, admin, 'tournament_started', 'tournament', tId, '')
+          return J({ ok: true })
+        }
+
+        if (tAction === 'cancel' && method === 'POST') {
+          await db.collection('tournaments').updateOne({ id: tId }, { $set: { status: 'CANCELADO', finishedAt: new Date() } })
+          // Refund all participants
+          const parts = await db.collection('tournament_participants').find({ tournamentId: tId }).toArray()
+          for (const p of parts) {
+            if (tournament.entryFeeCents > 0) {
+              const u = await db.collection('users').findOne({ id: p.userId })
+              const nb = (u?.balanceCents || 0) + tournament.entryFeeCents
+              await db.collection('users').updateOne({ id: p.userId }, { $set: { balanceCents: nb } })
+              await db.collection('transactions').insertOne({ id: uuidv4(), userId: p.userId, type: 'tournament_refund', amountCents: tournament.entryFeeCents, balance: nb, description: `Reembolso torneio cancelado: ${tournament.name}`, createdAt: new Date() })
+              await createNotification(db, p.userId, 'tournament', 'Torneio cancelado', `O torneio "${tournament.name}" foi cancelado. A tua inscrição foi reembolsada.`)
+            }
+          }
+          await logAudit(db, admin, 'tournament_cancelled', 'tournament', tId, '')
+          return J({ ok: true })
+        }
+
+        const adminMatchResolve = tAction?.match(/^match\/([^\/]+)\/resolve$/)
+        if (adminMatchResolve && method === 'POST') {
+          const matchId = adminMatchResolve[1]
+          const { winnerId } = await request.json()
+          const match = await db.collection('tournament_matches').findOne({ id: matchId, tournamentId: tId })
+          if (!match) return ERR('Partida não encontrada', 404)
+          if (![match.player1Id, match.player2Id].includes(winnerId)) return ERR('Vencedor inválido')
+          await finalizeTournamentMatch(db, tournament, match, winnerId)
+          await logAudit(db, admin, 'tournament_match_resolved', 'tournament', tId, `matchId=${matchId} winner=${winnerId}`)
+          return J({ ok: true })
+        }
+      }
+
       if (route === '/admin/bonus-eligible' && method === 'GET') {
         // First 3 unique players (creators) whose rooms were finalized, ordered by finishedAt
         const finalized = await db.collection('rooms')
@@ -1110,6 +1271,44 @@ async function handleRoute(request, { params }) {
   } catch (e) {
     console.error('API Error:', e)
     return ERR('Erro interno: ' + e.message, 500)
+  }
+}
+
+async function finalizeTournamentMatch(db, tournament, match, winnerId) {
+  const loserId = winnerId === match.player1Id ? match.player2Id : match.player1Id
+  await db.collection('tournament_matches').updateOne({ id: match.id }, { $set: { status: 'FINALIZADA', winnerId, finishedAt: new Date() } })
+  await db.collection('tournament_participants').updateOne({ tournamentId: tournament.id, userId: loserId }, { $set: { eliminatedRound: match.round } })
+  const tFresh = await db.collection('tournaments').findOne({ id: tournament.id })
+  const roundMatches = await db.collection('tournament_matches').find({ tournamentId: tournament.id, round: match.round }).toArray()
+  const allDone = roundMatches.every(m => m.status === 'FINALIZADA' || m.id === match.id)
+  if (!allDone) return
+  const winners = roundMatches.map(m => m.id === match.id ? winnerId : m.winnerId)
+  if (winners.length === 1) {
+    // Tournament over
+    const prize1 = tFresh.prizeFirstCents || 0
+    const prize2 = tFresh.prizeSecondCents || 0
+    const finalWinner = winners[0]
+    const finalLoser = loserId
+    const wu = await db.collection('users').findOne({ id: finalWinner })
+    await db.collection('users').updateOne({ id: finalWinner }, { $set: { balanceCents: (wu?.balanceCents || 0) + prize1 }, $inc: { totalEarningsCents: prize1 } })
+    await db.collection('transactions').insertOne({ id: uuidv4(), userId: finalWinner, type: 'tournament_prize', amountCents: prize1, balance: (wu?.balanceCents || 0) + prize1, description: `1º lugar torneio: ${tFresh.name}`, createdAt: new Date() })
+    if (prize2 > 0) {
+      const lu = await db.collection('users').findOne({ id: finalLoser })
+      await db.collection('users').updateOne({ id: finalLoser }, { $set: { balanceCents: (lu?.balanceCents || 0) + prize2 }, $inc: { totalEarningsCents: prize2 } })
+      await db.collection('transactions').insertOne({ id: uuidv4(), userId: finalLoser, type: 'tournament_prize', amountCents: prize2, balance: (lu?.balanceCents || 0) + prize2, description: `2º lugar torneio: ${tFresh.name}`, createdAt: new Date() })
+    }
+    await db.collection('tournaments').updateOne({ id: tournament.id }, { $set: { status: 'FINALIZADO', winnerId: finalWinner, finishedAt: new Date() } })
+    await createNotification(db, finalWinner, 'tournament', '🏆 Campeão!', `Parabéns! Ganhaste o torneio "${tFresh.name}" e recebeste ${(prize1/100).toFixed(2)}€!`)
+    if (prize2 > 0) await createNotification(db, finalLoser, 'tournament', '🥈 2º lugar!', `Ficaste em 2º lugar no torneio "${tFresh.name}" e recebeste ${(prize2/100).toFixed(2)}€!`)
+  } else {
+    // Generate next round
+    const nextRound = match.round + 1
+    await db.collection('tournaments').updateOne({ id: tournament.id }, { $set: { currentRound: nextRound } })
+    for (let i = 0; i < winners.length - 1; i += 2) {
+      await db.collection('tournament_matches').insertOne({ id: uuidv4(), tournamentId: tournament.id, round: nextRound, player1Id: winners[i], player2Id: winners[i+1], claim1: null, claim2: null, winnerId: null, status: 'PENDENTE', createdAt: new Date(), finishedAt: null })
+    }
+    const parts = await db.collection('tournament_participants').find({ tournamentId: tournament.id, eliminatedRound: null }).toArray()
+    for (const p of parts) await createNotification(db, p.userId, 'tournament', `🏆 Ronda ${nextRound}`, `A ronda ${nextRound} do torneio "${tFresh.name}" começou! Verifica o teu duelo.`)
   }
 }
 

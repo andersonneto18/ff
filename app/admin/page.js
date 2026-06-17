@@ -1096,6 +1096,165 @@ function MbwayTopupsSection() {
   )
 }
 
+// -------- TOURNAMENTS --------
+function TournamentsSection() {
+  const [list, setList] = useState([])
+  const [creating, setCreating] = useState(false)
+  const [form, setForm] = useState({ name: '', description: '', entryFeeEuros: '5', maxPlayers: '8' })
+  const [busy, setBusy] = useState(false)
+  const [selected, setSelected] = useState(null)
+  const [details, setDetails] = useState(null)
+
+  const load = useCallback(async () => {
+    try { const d = await api('/admin/tournaments'); setList(d.tournaments || []) } catch (e) {}
+  }, [])
+
+  useEffect(() => { load(); const i = setInterval(load, 6000); return () => clearInterval(i) }, [load])
+
+  const loadDetails = useCallback(async (id) => {
+    try { const d = await api(`/tournaments/${id}`); setDetails(d) } catch (e) {}
+  }, [])
+
+  useEffect(() => { if (selected) loadDetails(selected) }, [selected, loadDetails])
+
+  const create = async (e) => {
+    e.preventDefault(); setBusy(true)
+    try {
+      await api('/admin/tournaments', { method: 'POST', body: JSON.stringify(form) })
+      toast.success('Torneio criado'); setCreating(false); setForm({ name: '', description: '', entryFeeEuros: '5', maxPlayers: '8' }); load()
+    } catch (err) { toast.error(err.message) } finally { setBusy(false) }
+  }
+
+  const toggle = async (t) => {
+    const newStatus = t.status === 'ABERTO' ? 'RASCUNHO' : 'ABERTO'
+    try { await api(`/admin/tournaments/${t.id}`, { method: 'PUT', body: JSON.stringify({ status: newStatus }) }); load() } catch (e) { toast.error(e.message) }
+  }
+
+  const start = async (t) => {
+    if (!window.confirm(`Iniciar torneio "${t.name}" com ${t.currentPlayers} jogadores?`)) return
+    setBusy(true)
+    try { await api(`/admin/tournaments/${t.id}/start`, { method: 'POST', body: '{}' }); toast.success('Torneio iniciado!'); load(); loadDetails(t.id) } catch (e) { toast.error(e.message) } finally { setBusy(false) }
+  }
+
+  const cancel = async (t) => {
+    if (!window.confirm(`Cancelar torneio "${t.name}"? Os jogadores serão reembolsados.`)) return
+    setBusy(true)
+    try { await api(`/admin/tournaments/${t.id}/cancel`, { method: 'POST', body: '{}' }); toast.success('Torneio cancelado e reembolsos efetuados'); load() } catch (e) { toast.error(e.message) } finally { setBusy(false) }
+  }
+
+  const resolveMatch = async (tId, matchId, winnerId, nick) => {
+    if (!window.confirm(`Declarar ${nick} como vencedor?`)) return
+    try { await api(`/admin/tournaments/${tId}/match/${matchId}/resolve`, { method: 'POST', body: JSON.stringify({ winnerId }) }); toast.success('Partida resolvida'); loadDetails(tId) } catch (e) { toast.error(e.message) }
+  }
+
+  const STATUS_COLORS = { RASCUNHO: 'bg-zinc-700/40 text-zinc-400', ABERTO: 'bg-green-500/15 text-green-300', EM_ANDAMENTO: 'bg-purple-500/15 text-purple-300', FINALIZADO: 'bg-blue-500/15 text-blue-300', CANCELADO: 'bg-red-500/15 text-red-400' }
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <h1 className="text-3xl font-bold text-white">Torneios</h1>
+        <Button onClick={() => setCreating(true)} className="bg-gradient-to-r from-purple-600 to-blue-500">+ Criar Torneio</Button>
+      </div>
+
+      {creating && (
+        <Card className="bg-zinc-900 border-purple-500/30 p-5">
+          <h3 className="font-bold text-white mb-4">Novo Torneio</h3>
+          <form onSubmit={create} className="space-y-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div><Label className="text-zinc-300">Nome *</Label><input value={form.name} onChange={e => setForm({...form, name: e.target.value})} required placeholder="Torneio Semanal #1" className="w-full mt-1 bg-zinc-800 border border-zinc-700 text-white rounded-md px-3 py-2 text-sm focus:outline-none focus:border-purple-500" /></div>
+              <div><Label className="text-zinc-300">Entrada (€)</Label><input type="number" min="0" step="0.50" value={form.entryFeeEuros} onChange={e => setForm({...form, entryFeeEuros: e.target.value})} className="w-full mt-1 bg-zinc-800 border border-zinc-700 text-white rounded-md px-3 py-2 text-sm focus:outline-none focus:border-purple-500" /></div>
+              <div><Label className="text-zinc-300">Máx. Jogadores</Label>
+                <select value={form.maxPlayers} onChange={e => setForm({...form, maxPlayers: e.target.value})} className="w-full mt-1 bg-zinc-800 border border-zinc-700 text-white rounded-md px-3 py-2 text-sm focus:outline-none focus:border-purple-500">
+                  <option value="4">4 jogadores</option><option value="8">8 jogadores</option><option value="16">16 jogadores</option>
+                </select>
+              </div>
+              <div><Label className="text-zinc-300">Descrição</Label><input value={form.description} onChange={e => setForm({...form, description: e.target.value})} placeholder="Modo, regras..." className="w-full mt-1 bg-zinc-800 border border-zinc-700 text-white rounded-md px-3 py-2 text-sm focus:outline-none focus:border-purple-500" /></div>
+            </div>
+            {form.entryFeeEuros > 0 && (
+              <div className="text-xs text-zinc-400 bg-zinc-800/60 rounded p-3">
+                Pote total ({form.maxPlayers} jogadores × {form.entryFeeEuros}€): <b className="text-white">{(form.maxPlayers * form.entryFeeEuros).toFixed(2)}€</b> →
+                1º: <b className="text-yellow-300">{(form.maxPlayers * form.entryFeeEuros * 0.8 * 0.875).toFixed(2)}€</b> ·
+                2º: <b className="text-zinc-300">{(form.maxPlayers * form.entryFeeEuros * 0.8 * 0.125).toFixed(2)}€</b> ·
+                Plataforma: <b className="text-purple-300">{(form.maxPlayers * form.entryFeeEuros * 0.2).toFixed(2)}€</b>
+              </div>
+            )}
+            <div className="flex gap-2">
+              <Button type="submit" disabled={busy} className="bg-purple-600">{busy ? 'A criar...' : 'Criar'}</Button>
+              <Button type="button" variant="outline" onClick={() => setCreating(false)} className="border-zinc-700">Cancelar</Button>
+            </div>
+          </form>
+        </Card>
+      )}
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {list.map(t => (
+          <Card key={t.id} className={`bg-zinc-900 border-zinc-800 p-4 cursor-pointer hover:border-purple-500/40 transition ${selected === t.id ? 'border-purple-500/60' : ''}`} onClick={() => setSelected(selected === t.id ? null : t.id)}>
+            <div className="flex items-start justify-between gap-2 mb-3">
+              <div>
+                <div className="font-bold text-white">{t.name}</div>
+                {t.description && <div className="text-xs text-zinc-500 mt-0.5">{t.description}</div>}
+              </div>
+              <span className={`text-xs px-2 py-0.5 rounded-full font-bold shrink-0 ${STATUS_COLORS[t.status] || ''}`}>{t.status}</span>
+            </div>
+            <div className="flex gap-4 text-xs text-zinc-400 mb-3">
+              <span>💰 {t.entryFeeCents > 0 ? `${(t.entryFeeCents/100).toFixed(2)}€` : 'Grátis'}</span>
+              <span>👥 {t.currentPlayers}/{t.maxPlayers}</span>
+              <span>🏆 Pote: {((t.entryFeeCents * t.maxPlayers)/100).toFixed(2)}€</span>
+            </div>
+            <div className="flex gap-2 flex-wrap" onClick={e => e.stopPropagation()}>
+              {['RASCUNHO','ABERTO'].includes(t.status) && (
+                <Button size="sm" onClick={() => toggle(t)} className={t.status === 'ABERTO' ? 'bg-red-600 hover:bg-red-700' : 'bg-green-600 hover:bg-green-700'}>
+                  {t.status === 'ABERTO' ? 'Desativar' : 'Ativar'}
+                </Button>
+              )}
+              {t.status === 'ABERTO' && t.currentPlayers >= 2 && (
+                <Button size="sm" disabled={busy} onClick={() => start(t)} className="bg-purple-600 hover:bg-purple-700">▶ Iniciar</Button>
+              )}
+              {['ABERTO','EM_ANDAMENTO'].includes(t.status) && (
+                <Button size="sm" variant="outline" onClick={() => cancel(t)} className="border-red-500/40 text-red-300">Cancelar</Button>
+              )}
+            </div>
+
+            {selected === t.id && details && (
+              <div className="mt-4 pt-4 border-t border-zinc-700 space-y-3">
+                {[...new Set((details.matches || []).map(m => m.round))].map(round => (
+                  <div key={round}>
+                    <div className="text-xs font-bold text-purple-300 mb-2">Ronda {round}</div>
+                    {(details.matches || []).filter(m => m.round === round).map(m => {
+                      const p1 = details.umap?.[m.player1Id]; const p2 = details.umap?.[m.player2Id]
+                      return (
+                        <div key={m.id} className={`flex items-center gap-2 text-xs p-2 rounded-lg mb-1 ${m.status === 'EM_CONFLITO' ? 'bg-orange-500/15 border border-orange-500/30' : 'bg-zinc-800/60'}`}>
+                          <span className={m.winnerId === m.player1Id ? 'text-green-300 font-bold' : 'text-zinc-300'}>{p1?.ffNickname || '?'}</span>
+                          <span className="text-zinc-600">vs</span>
+                          <span className={m.winnerId === m.player2Id ? 'text-green-300 font-bold' : 'text-zinc-300'}>{p2?.ffNickname || '?'}</span>
+                          <span className="ml-auto">
+                            {m.status === 'FINALIZADA' && <span className="text-green-400">✓</span>}
+                            {m.status === 'PENDENTE' && <span className="text-zinc-500">Pendente</span>}
+                            {m.status === 'EM_CONFLITO' && (
+                              <div className="flex gap-1">
+                                <button onClick={() => resolveMatch(t.id, m.id, m.player1Id, p1?.ffNickname)} className="bg-green-600 text-white px-2 py-0.5 rounded text-[10px]">{p1?.ffNickname} vence</button>
+                                <button onClick={() => resolveMatch(t.id, m.id, m.player2Id, p2?.ffNickname)} className="bg-green-600 text-white px-2 py-0.5 rounded text-[10px]">{p2?.ffNickname} vence</button>
+                              </div>
+                            )}
+                          </span>
+                        </div>
+                      )
+                    })}
+                  </div>
+                ))}
+                {t.status === 'FINALIZADO' && details.tournament?.winnerId && (
+                  <div className="text-center text-yellow-300 font-bold text-sm">🏆 Campeão: {details.umap?.[details.tournament.winnerId]?.ffNickname}</div>
+                )}
+              </div>
+            )}
+          </Card>
+        ))}
+        {!list.length && <div className="text-zinc-500 col-span-2 text-center py-8">Sem torneios criados ainda.</div>}
+      </div>
+    </div>
+  )
+}
+
 // -------- SUPPORT --------
 function SupportSection() {
   const [chats, setChats] = useState([])
@@ -1219,6 +1378,7 @@ function AdminLayout({ admin, onLogout }) {
     ['mbway-topups', 'MB WAY', Smartphone],
     ['players', 'Jogadores', Users],
     ['audit', 'Auditoria', ClipboardList],
+    ['tournaments', 'Torneios', Crown],
     ['support', 'Suporte', MessageSquare],
   ]
   return (
@@ -1273,6 +1433,7 @@ function AdminLayout({ admin, onLogout }) {
         {section === 'mbway-topups' && <MbwayTopupsSection />}
         {section === 'players' && <PlayersSection />}
         {section === 'audit' && <AuditSection />}
+        {section === 'tournaments' && <TournamentsSection />}
         {section === 'support' && <SupportSection />}
       </main>
     </div>
