@@ -1140,7 +1140,7 @@ function WalletView({ refreshMe, stripeEnabled }) {
 
   const request = async () => {
     const cents = Math.round(parseFloat(form.amountEuros || '0') * 100)
-    if (!cents || cents < 1000) return toast.error('Valor mínimo de levantamento: 10€')
+    if (!cents || cents < 200) return toast.error('Valor mínimo de levantamento: 2€')
     if (cents > (data?.balanceCents || 0)) return toast.error('Saldo insuficiente')
     setBusy(true)
     try {
