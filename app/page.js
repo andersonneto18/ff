@@ -1428,9 +1428,8 @@ function Stat({ label, value, color }) {
 
 function Shell({ me, onLogout, view, setView, children }) {
   const [topupsEnabled, setTopupsEnabled] = useState(true)
-  const [stripeEnabled, setStripeEnabled] = useState(false)
   useEffect(() => {
-    const load = () => fetch('/api/platform-status').then(r => r.json()).then(d => { setTopupsEnabled(d.topupsEnabled); setStripeEnabled(d.stripeEnabled) }).catch(() => {})
+    const load = () => fetch('/api/platform-status').then(r => r.json()).then(d => { setTopupsEnabled(d.topupsEnabled) }).catch(() => {})
     load()
     const i = setInterval(load, 30000)
     return () => clearInterval(i)
@@ -1498,7 +1497,15 @@ function Dashboard({ me, onLogout, refreshMe }) {
   const [myRooms, setMyRooms] = useState([])
   const [openRoom, setOpenRoom] = useState(sp.get('id') || null)
   const [createOpen, setCreateOpen] = useState(false)
+  const [stripeEnabled, setStripeEnabled] = useState(false)
   const api = useApi()
+
+  useEffect(() => {
+    const load = () => fetch('/api/platform-status').then(r => r.json()).then(d => setStripeEnabled(d.stripeEnabled)).catch(() => {})
+    load()
+    const i = setInterval(load, 30000)
+    return () => clearInterval(i)
+  }, [])
 
   useEffect(() => {
     const v = sp.get('view'); const id = sp.get('id')
