@@ -1631,8 +1631,8 @@ function TournamentsView({ me }) {
           const st = STATUS_LABEL[t.status] || { l: t.status, cls: '' }
           const isJoined = t.isJoined || (selected === t.id && details?.participants?.some(p => p.userId === me?.id))
           const totalPot = (t.entryFeeCents * t.maxPlayers) / 100
-          const prize1 = (totalPot * 0.8 * 0.875).toFixed(2)
-          const prize2 = (totalPot * 0.8 * 0.125).toFixed(2)
+          const prize2 = (t.entryFeeCents / 100).toFixed(2)
+          const prize1 = (totalPot * 0.8 - parseFloat(prize2)).toFixed(2)
 
           return (
             <Card key={t.id} className="glow-card border-purple-500/20 p-5">
@@ -2060,7 +2060,8 @@ function Dashboard({ me, onLogout, refreshMe }) {
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {arenaTourn.map(t => {
                   const totalPot = (t.entryFeeCents * t.maxPlayers) / 100
-                  const prize1 = (totalPot * 0.8 * 0.875).toFixed(2)
+                  const prize2Arena = (t.entryFeeCents / 100).toFixed(2)
+                  const prize1 = (totalPot * 0.8 - parseFloat(prize2Arena)).toFixed(2)
                   const isOpen = t.status === 'ABERTO'
                   return (
                     <Card key={t.id} className="glow-card border-yellow-500/30 p-4 cursor-pointer hover:scale-[1.01] transition" onClick={() => setViewClean('tournaments')}>
