@@ -1135,8 +1135,8 @@ async function handleRoute(request, { params }) {
           const shuffled = participants.sort(() => Math.random() - 0.5)
           const totalPot = tournament.entryFeeCents * shuffled.length
           const commission = Math.round(totalPot * COMMISSION)
-          const prizeFirst = Math.round((totalPot - commission) * 0.875)
-          const prizeSecond = totalPot - commission - prizeFirst
+          const prizeSecond = tournament.entryFeeCents
+          const prizeFirst = (totalPot - commission) - prizeSecond
           await db.collection('tournaments').updateOne({ id: tId }, { $set: { status: 'EM_ANDAMENTO', currentRound: 1, startedAt: new Date(), prizeFirstCents: prizeFirst, prizeSecondCents: prizeSecond, commissionCents: commission } })
           await generateRoundMatches(db, tId, shuffled.map(p => p.userId), 1, tournament.name)
           for (const p of shuffled) await createNotification(db, p.userId, 'tournament', '🏆 Torneio iniciado!', `O torneio "${tournament.name}" começou! Verifica o teu duelo na tab Torneios.`)
