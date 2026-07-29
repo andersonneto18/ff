@@ -4,6 +4,7 @@ import Stripe from 'stripe'
 import { connectDb } from '@/lib/db'
 import { hashPassword, verifyPassword, createSession, getUserFromRequest, sanitizeUser } from '@/lib/auth'
 import { sendPushToUser, hashEndpoint } from '@/lib/push'
+import { getUploadUrl, getViewUrl } from '@/lib/r2'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -43,6 +44,18 @@ async function logAudit(db, admin, action, targetType, targetId, details = '') {
     id: uuidv4(), adminId: admin.id, adminName: admin.name || admin.email,
     action, targetType, targetId, details: details || '', createdAt: new Date(),
   })
+}
+
+// reports.videoUrl stores the R2 object key (not a public URL, bucket is private) —
+// resolve it to a short-lived signed URL right before sending to the admin UI.
+async function resolveReportVideo(report) {
+  if (!report.videoUrl) return report
+  try {
+    return { ...report, videoUrl: await getViewUrl(report.videoUrl) }
+  } catch (e) {
+    console.error('Erro ao gerar URL assinada do vídeo:', e.message)
+    return report
+  }
 }
 
 async function autoFinalizeTimeout(db, room) {
@@ -329,8 +342,18 @@ async function handleRoute(request, { params }) {
         return J({ ok: true, message: clean(doc) })
       }
 
+      if (action === 'video-upload-url' && method === 'POST') {
+        if (room.creatorId !== user.id && room.opponentId !== user.id) return ERR('Não és participante', 403)
+        const { contentType } = await request.json()
+        const ct = contentType || 'video/mp4'
+        const ext = (ct.split('/')[1] || 'mp4').replace(/[^a-z0-9]/gi, '') || 'mp4'
+        const key = `reports/${room.id}/${uuidv4()}.${ext}`
+        const uploadUrl = await getUploadUrl(key, ct)
+        return J({ uploadUrl, key })
+      }
+
       if (action === 'report' && method === 'POST') {
-        const { reason, videoData, screenshots } = await request.json()
+        const { reason, videoKey, screenshots } = await request.json()
         if (room.creatorId !== user.id && room.opponentId !== user.id) return ERR('Não és participante', 403)
         if (!['EM_ANDAMENTO', 'EM_CONFLITO', 'EM_DISPUTA', 'FINALIZADA'].includes(room.status)) return ERR('Estado da sala não permite denúncia')
         if (room.status === 'FINALIZADA') {
@@ -341,7 +364,7 @@ async function handleRoute(request, { params }) {
         const sc = Array.isArray(screenshots) ? screenshots.filter(Boolean).slice(0, 6) : []
         await db.collection('reports').insertOne({
           id: uuidv4(), roomId: room.id, reporterId: user.id, reason: reason || '',
-          videoData: videoData || null, screenshots: sc, status: 'PENDENTE',
+          videoUrl: videoKey || null, screenshots: sc, status: 'PENDENTE',
           createdAt: new Date(),
         })
         await db.collection('rooms').updateOne({ id: roomId }, { $set: { status: 'EM_DISPUTA', previousStatus: room.status } })
@@ -736,11 +759,11 @@ async function handleRoute(request, { params }) {
         const match = await db.collection('tournament_matches').findOne({ id: matchId, tournamentId: tId })
         if (!match) return ERR('Partida não encontrada', 404)
         if (match.player1Id !== user.id && match.player2Id !== user.id) return ERR('Não és participante', 403)
-        const { reason, videoData, screenshots } = await request.json()
+        const { reason, videoKey, screenshots } = await request.json()
         const sc = Array.isArray(screenshots) ? screenshots.filter(Boolean).slice(0, 6) : []
         await db.collection('reports').insertOne({
           id: uuidv4(), roomId: null, tournamentId: tId, tournamentMatchId: matchId,
-          reporterId: user.id, reason: reason || '', videoData: videoData || null,
+          reporterId: user.id, reason: reason || '', videoUrl: videoKey || null,
           screenshots: sc, status: 'PENDENTE', createdAt: new Date(),
         })
         await db.collection('tournament_matches').updateOne({ id: matchId }, { $set: { status: 'EM_CONFLITO' } })
@@ -938,7 +961,13 @@ async function handleRoute(request, { params }) {
         const users = await db.collection('users').find({ id: { $in: [...new Set(userIds)] } }).toArray()
         const umap = Object.fromEntries(users.map(u => [u.id, sanitizeUser(u)]))
         const rmap = Object.fromEntries(rooms.map(r => [r.id, clean(r)]))
-        return J({ reports: reports.map(r => ({ ...clean(r), reporter: umap[r.reporterId], room: rmap[r.roomId], creator: rmap[r.roomId] ? umap[rmap[r.roomId].creatorId] : null, opponent: rmap[r.roomId]?.opponentId ? umap[rmap[r.roomId].opponentId] : null })) })
+        const mapped = await Promise.all(reports.map(async (r) => ({
+          ...(await resolveReportVideo(clean(r))),
+          reporter: umap[r.reporterId], room: rmap[r.roomId],
+          creator: rmap[r.roomId] ? umap[rmap[r.roomId].creatorId] : null,
+          opponent: rmap[r.roomId]?.opponentId ? umap[rmap[r.roomId].opponentId] : null,
+        })))
+        return J({ reports: mapped })
       }
 
       const reportMatch = route.match(/^\/admin\/report\/([^\/]+)$/)
@@ -997,7 +1026,7 @@ async function handleRoute(request, { params }) {
         const rmap = {}
         for (const r of reports) {
           rmap[r.roomId] = rmap[r.roomId] || []
-          rmap[r.roomId].push(clean(r))
+          rmap[r.roomId].push(await resolveReportVideo(clean(r)))
         }
         const messages = await db.collection('room_messages').find({ roomId: { $in: rooms.map(r => r.id) } }).sort({ createdAt: 1 }).toArray()
         const mmap = {}

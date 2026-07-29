@@ -551,12 +551,12 @@ function ReportsSection() {
                 <div className="text-zinc-200">{r.reason || '(sem motivo descrito)'}</div>
               </div>
 
-              {(r.videoData || (r.screenshots && r.screenshots.length > 0)) && (
+              {(r.videoUrl || (r.screenshots && r.screenshots.length > 0)) && (
                 <div className="mb-3">
                   <div className="text-xs text-zinc-400 mb-2">📸 Provas</div>
                   <div className="flex gap-2 flex-wrap">
-                    {r.videoData && (
-                      <video src={r.videoData} controls className="w-full max-w-sm rounded border border-zinc-700 max-h-48" />
+                    {r.videoUrl && (
+                      <video src={r.videoUrl} controls className="w-full max-w-sm rounded border border-zinc-700 max-h-48" />
                     )}
                     {(r.screenshots || []).map((s, i) => (
                       <a key={i} href={s} target="_blank" rel="noreferrer" className="block">

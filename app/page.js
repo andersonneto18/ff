@@ -805,10 +805,25 @@ function RoomDetail({ roomId, me, onBack, refreshMe }) {
         reader.readAsDataURL(f)
       })
       const screenshots = await Promise.all((report.files || []).slice(0, 4).map(f => readFile(f, 2)))
-      const videoData = report.videoFile ? await readFile(report.videoFile, 50) : null
+      let videoKey = null
+      if (report.videoFile) {
+        if (report.videoFile.size > 1024 * 1024 * 1024) throw new Error('Vídeo excede 1GB')
+        // Upload goes straight from the browser to R2 — never passes through our server/DB
+        const { uploadUrl, key } = await api('/rooms/' + room.id + '/video-upload-url', {
+          method: 'POST',
+          body: JSON.stringify({ contentType: report.videoFile.type }),
+        })
+        const uploadRes = await fetch(uploadUrl, {
+          method: 'PUT',
+          headers: { 'Content-Type': report.videoFile.type },
+          body: report.videoFile,
+        })
+        if (!uploadRes.ok) throw new Error('Falha ao enviar vídeo')
+        videoKey = key
+      }
       await api('/rooms/' + room.id + '/report', {
         method: 'POST',
-        body: JSON.stringify({ reason: report.reason, videoData, screenshots })
+        body: JSON.stringify({ reason: report.reason, videoKey, screenshots })
       })
       toast.success('Denúncia enviada. O administrador irá analisar.')
       setReportOpen(false); setReport({ reason: '', videoFile: null, files: [] }); load()
@@ -980,7 +995,7 @@ function RoomDetail({ roomId, me, onBack, refreshMe }) {
               )}
             </div>
             <div>
-              <Label>🎥 Vídeo de prova (opcional, máx 50MB)</Label>
+              <Label>🎥 Vídeo de prova (opcional, máx 1GB)</Label>
               <Input type="file" accept="video/*" onChange={e => setReport({ ...report, videoFile: e.target.files?.[0] || null })} className="cursor-pointer" />
               {report.videoFile && (
                 <div className="mt-1 text-xs bg-blue-500/15 border border-blue-500/30 rounded px-2 py-1 flex items-center gap-1">

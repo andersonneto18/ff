@@ -10,6 +10,8 @@
         "start": "next start"
     },
     "dependencies": {
+        "@aws-sdk/client-s3": "^3.1097.0",
+        "@aws-sdk/s3-request-presigner": "^3.1097.0",
         "@hookform/resolvers": "5.1.1",
         "@radix-ui/react-accordion": "1.2.11",
         "@radix-ui/react-alert-dialog": "1.1.14",

@@ -92,6 +92,10 @@ Ficheiro: `.env` (nunca versionar com credenciais reais)
 | `VAPID_PUBLIC_KEY` | Chave pública VAPID para Web Push |
 | `VAPID_PRIVATE_KEY` | Chave privada VAPID para Web Push |
 | `VAPID_SUBJECT` | Email de contacto VAPID (`mailto:...`) |
+| `R2_ACCOUNT_ID` | ID da conta Cloudflare |
+| `R2_ENDPOINT` | Endpoint S3 do R2 (`https://<account_id>.r2.cloudflarestorage.com`) |
+| `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` | Credenciais do token de API R2 (Object Read & Write, restrito ao bucket) |
+| `R2_BUCKET_NAME` | Nome do bucket usado para vídeos de denúncia (privado) |
 
 ---
 
@@ -198,7 +202,8 @@ ABERTA → CANCELADA
 | `roomId` / `reporterId` | UUID FK | Contexto |
 | `tournamentId` / `tournamentMatchId` | UUID | Se for torneio |
 | `reason` | TEXT | Descrição do problema |
-| `videoData` | LONGTEXT | Vídeo em base64 |
+| `videoData` | LONGTEXT | *(legado, não usado em novos registos)* Vídeo em base64 |
+| `videoUrl` | TEXT | Chave do objeto no Cloudflare R2 (`reports/{roomId}/{uuid}.ext`). Resolvida para link assinado (1h) ao ser devolvida ao admin |
 | `screenshots` | JSON | Array de imagens base64 |
 | `status` | ENUM | PENDENTE / ACEITE / REJEITADA |
 | `createdAt` / `processedAt` | DATETIME | Timestamps |
@@ -289,7 +294,8 @@ Todos os endpoints autenticados retornam `401` se o token for inválido.
 | POST | `/rooms/:id/claim` | ✓ | Submete resultado. Body: `{result: "win"\|"loss"}` |
 | GET | `/rooms/:id/messages` | ✓ | Histórico de chat (últimas 500 msgs) |
 | POST | `/rooms/:id/messages` | ✓ | Envia mensagem. Body: `{message}` |
-| POST | `/rooms/:id/report` | ✓ | Envia denúncia. Body: `{reason, videoData?, screenshots[]}` |
+| POST | `/rooms/:id/video-upload-url` | ✓ | Gera URL assinada (10 min) para upload direto do vídeo ao R2. Body: `{contentType}` → retorna `{uploadUrl, key}` |
+| POST | `/rooms/:id/report` | ✓ | Envia denúncia. Body: `{reason, videoKey?, screenshots[]}` — `videoKey` é a chave devolvida pelo upload ao R2 |
 
 ---
 
