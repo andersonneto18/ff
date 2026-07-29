@@ -590,6 +590,7 @@ function ReportsSection() {
 function DisputesSection() {
   const [disputes, setDisputes] = useState([])
   const [busy, setBusy] = useState(false)
+  const [videoModal, setVideoModal] = useState(null)
   const load = useCallback(async () => {
     try { const d = await api('/admin/disputes'); setDisputes(d.disputes || []) }
     catch (e) { toast.error(e.message) }
@@ -660,9 +661,9 @@ function DisputesSection() {
                   {(r.videoUrl || (r.screenshots && r.screenshots.length > 0)) && (
                     <div className="flex gap-2 flex-wrap">
                       {r.videoUrl && (
-                        <a href={r.videoUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 bg-zinc-800 hover:bg-zinc-700 rounded px-3 py-2 text-sm text-blue-300">
+                        <button onClick={() => setVideoModal(r.videoUrl)} className="inline-flex items-center gap-2 bg-zinc-800 hover:bg-zinc-700 rounded px-3 py-2 text-sm text-blue-300">
                           <Video className="w-4 h-4" /> Ver vídeo
-                        </a>
+                        </button>
                       )}
                       {(r.screenshots || []).map((s, i) => (
                         <a key={i} href={s} target="_blank" rel="noreferrer" className="block">
@@ -710,6 +711,15 @@ function DisputesSection() {
         })}
         {!disputes.length && <Card className="bg-zinc-900 border-zinc-800 p-8 text-center text-zinc-500">Sem disputas pendentes.</Card>}
       </div>
+
+      <Dialog open={!!videoModal} onOpenChange={(open) => !open && setVideoModal(null)}>
+        <DialogContent className="bg-zinc-900 border-zinc-800 text-white max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Vídeo de prova</DialogTitle>
+          </DialogHeader>
+          {videoModal && <video src={videoModal} controls autoPlay className="w-full rounded border border-zinc-700 max-h-[70vh]" />}
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
