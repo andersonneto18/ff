@@ -28,12 +28,18 @@ async function main() {
   console.log('='.repeat(50))
   console.log('Isto irá:')
   console.log('  • Zerar saldo, ganhos, vitórias e derrotas de todos os jogadores')
+  console.log('  • Desligar todos os jogadores de qualquer influenciador (referredBy)')
   console.log('  • Apagar todas as transações e comissões')
-  console.log('  • Apagar todos os levantamentos e pedidos MB WAY')
   console.log('  • Apagar todas as salas, denúncias e mensagens')
-  console.log('  • NÃO apaga utilizadores nem sessões\n')
+  console.log('  • Apagar todos os levantamentos e pedidos MB WAY')
+  console.log('  • Apagar todos os torneios, partidas e inscrições')
+  console.log('  • Apagar TODOS os influenciadores e as suas comissões/levantamentos')
+  console.log('  • Apagar todo o histórico de suporte e o log de auditoria')
+  console.log('  • Apagar todas as notificações')
+  console.log('  • NÃO apaga contas de utilizador nem sessões (ninguém precisa de voltar a fazer login)')
+  console.log('  • NÃO apaga configurações da plataforma (MB WAY, IBAN, comissão, toggles)\n')
 
-  const ok = await confirm('Tens a certeza que queres continuar?')
+  const ok = await confirm('Tens a certeza que queres continuar? Isto é IRREVERSÍVEL')
   if (!ok) { console.log('Cancelado.'); process.exit(0) }
 
   const pool = await mysql.createPool({
@@ -48,9 +54,9 @@ async function main() {
 
   console.log('\n🔄 A resetar...\n')
 
-  // 1. Zero all player stats and balances
+  // 1. Zero all player stats and balances, and unlink any referral attribution
   const [usersResult] = await pool.query(
-    `UPDATE users SET balanceCents=0, pendingCents=0, totalEarningsCents=0, wins=0, losses=0 WHERE isAdmin=0`
+    `UPDATE users SET balanceCents=0, pendingCents=0, totalEarningsCents=0, wins=0, losses=0, referredBy=NULL WHERE isAdmin=0`
   )
   console.log(`✅ Jogadores resetados: ${usersResult.affectedRows} contas zeradas`)
 
@@ -81,9 +87,34 @@ async function main() {
   const [notifResult] = await pool.query(`DELETE FROM notifications`)
   console.log(`✅ Notificações apagadas: ${notifResult.affectedRows}`)
 
-  // 8. Keep platform_settings and users intact
-  console.log('\n✅ Configurações da plataforma mantidas (MB WAY, IBAN, toggles)')
+  // 8. Delete all tournaments and related data
+  const [tmResult] = await pool.query(`DELETE FROM tournament_matches`)
+  console.log(`✅ Partidas de torneio apagadas: ${tmResult.affectedRows}`)
+  const [tpResult] = await pool.query(`DELETE FROM tournament_participants`)
+  console.log(`✅ Inscrições em torneios apagadas: ${tpResult.affectedRows}`)
+  const [tResult] = await pool.query(`DELETE FROM tournaments`)
+  console.log(`✅ Torneios apagados: ${tResult.affectedRows}`)
+
+  // 9. Delete all influencers and their data
+  const [itResult] = await pool.query(`DELETE FROM influencer_transactions`)
+  console.log(`✅ Comissões de influenciadores apagadas: ${itResult.affectedRows}`)
+  const [iwResult] = await pool.query(`DELETE FROM influencer_withdrawals`)
+  console.log(`✅ Levantamentos de influenciadores apagados: ${iwResult.affectedRows}`)
+  const [isResult] = await pool.query(`DELETE FROM influencer_sessions`)
+  console.log(`✅ Sessões de influenciadores apagadas: ${isResult.affectedRows}`)
+  const [infResult] = await pool.query(`DELETE FROM influencers`)
+  console.log(`✅ Influenciadores apagados: ${infResult.affectedRows}`)
+
+  // 10. Delete support/audit history
+  const [supResult] = await pool.query(`DELETE FROM support_messages`)
+  console.log(`✅ Mensagens de suporte apagadas: ${supResult.affectedRows}`)
+  const [auditResult] = await pool.query(`DELETE FROM audit_log`)
+  console.log(`✅ Log de auditoria apagado: ${auditResult.affectedRows}`)
+
+  // 11. Keep platform_settings, users and sessions intact
+  console.log('\n✅ Configurações da plataforma mantidas (MB WAY, IBAN, toggles, comissão)')
   console.log('✅ Contas de utilizadores mantidas (emails, passwords, nicknames)')
+  console.log('✅ Sessões mantidas — ninguém precisa de voltar a iniciar sessão')
 
   console.log('\n🎉 Reset completo! A plataforma está limpa e pronta a usar.\n')
 
