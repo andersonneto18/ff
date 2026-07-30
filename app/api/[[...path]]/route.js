@@ -1339,7 +1339,7 @@ async function handleRoute(request, { params }) {
         if (!name?.trim()) return ERR('Nome obrigatório')
         const fee = Math.round(parseFloat(entryFeeEuros || 0) * 100)
         const max = parseInt(maxPlayers) || 8
-        if (max < 2 || max > 64) return ERR('Máximo de jogadores deve ser entre 2 e 64')
+        if (max < 4 || max > 64) return ERR('Máximo de jogadores deve ser entre 4 e 64')
         const t = { id: uuidv4(), name: name.trim(), description: description?.trim() || '', entryFeeCents: fee, maxPlayers: max, currentPlayers: 0, status: 'RASCUNHO', currentRound: 0, winnerId: null, prizeFirstCents: null, prizeSecondCents: null, commissionCents: null, mode: mode?.trim() || null, server: server?.trim() || null, weapons: weapons?.trim() || null, platform: platform?.trim() || null, rules: rules?.trim() || null, characters: characters?.trim() || null, pets: pets?.trim() || null, createdAt: new Date(), startedAt: null, finishedAt: null }
         await db.collection('tournaments').insertOne(t)
         await logAudit(db, admin, 'tournament_created', 'tournament', t.id, name)
@@ -1373,8 +1373,11 @@ async function handleRoute(request, { params }) {
           const shuffled = participants.sort(() => Math.random() - 0.5)
           const totalPot = tournament.entryFeeCents * shuffled.length
           const commission = Math.round(totalPot * COMMISSION)
-          const prizeSecond = tournament.entryFeeCents
-          const prizeFirst = (totalPot - commission) - prizeSecond
+          const net = totalPot - commission
+          // 2nd place gets 35% of the net pot (always a profit over their entry fee, guaranteed
+          // for tournaments with 4+ players — the enforced minimum), 1st gets the rest.
+          const prizeSecond = Math.round(net * 0.35)
+          const prizeFirst = net - prizeSecond
           await db.collection('tournaments').updateOne({ id: tId }, { $set: { status: 'EM_ANDAMENTO', currentRound: 1, startedAt: new Date(), prizeFirstCents: prizeFirst, prizeSecondCents: prizeSecond, commissionCents: commission } })
           await generateRoundMatches(db, tId, shuffled.map(p => p.userId), 1, tournament.name)
           for (const p of shuffled) await createNotification(db, p.userId, 'tournament', '🏆 Torneio iniciado!', `O torneio "${tournament.name}" começou! Verifica o teu duelo na tab Torneios.`)

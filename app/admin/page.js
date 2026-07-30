@@ -1286,8 +1286,8 @@ function TournamentsSection() {
             {form.entryFeeEuros > 0 && (
               <div className="text-xs text-zinc-400 bg-zinc-800/60 rounded p-3">
                 Pote total ({form.maxPlayers} jogadores × {form.entryFeeEuros}€): <b className="text-white">{(form.maxPlayers * form.entryFeeEuros).toFixed(2)}€</b> →
-                1º: <b className="text-yellow-300">{(form.maxPlayers * form.entryFeeEuros * 0.8 * 0.875).toFixed(2)}€</b> ·
-                2º: <b className="text-zinc-300">{(form.maxPlayers * form.entryFeeEuros * 0.8 * 0.125).toFixed(2)}€</b> ·
+                1º: <b className="text-yellow-300">{(form.maxPlayers * form.entryFeeEuros * 0.8 * 0.65).toFixed(2)}€</b> ·
+                2º: <b className="text-zinc-300">{(form.maxPlayers * form.entryFeeEuros * 0.8 * 0.35).toFixed(2)}€</b> ·
                 Plataforma: <b className="text-purple-300">{(form.maxPlayers * form.entryFeeEuros * 0.2).toFixed(2)}€</b>
               </div>
             )}

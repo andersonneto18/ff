@@ -1036,7 +1036,7 @@ function compressImage(file) {
   })
 }
 
-function WalletView({ refreshMe, stripeEnabled }) {
+function WalletView({ refreshMe, stripeEnabled, topupsEnabled }) {
   const api = useApi()
   const sp = useSearchParams()
   const [data, setData] = useState(null)
@@ -1182,7 +1182,7 @@ function WalletView({ refreshMe, stripeEnabled }) {
       </div>
 
       <div className="grid grid-cols-3 gap-3">
-        <Button onClick={() => setTopupOpen(true)} className="bg-gradient-to-r from-green-600 to-emerald-500 h-11">
+        <Button onClick={() => setTopupOpen(true)} disabled={!topupsEnabled} title={!topupsEnabled ? 'Carregamentos temporariamente desativados' : undefined} className="bg-gradient-to-r from-green-600 to-emerald-500 h-11 disabled:opacity-40 disabled:cursor-not-allowed">
           <Plus className="w-4 h-4 mr-1.5 shrink-0" /> <span className="truncate">Carregar</span>
         </Button>
         <Button onClick={openWithdraw} variant="outline" className="border-purple-500/40 h-11">
@@ -1991,10 +1991,11 @@ function Dashboard({ me, onLogout, refreshMe }) {
   const [createOpen, setCreateOpen] = useState(false)
   const [stripeEnabled, setStripeEnabled] = useState(false)
   const [bonusEnabled, setBonusEnabled] = useState(false)
+  const [topupsEnabled, setTopupsEnabled] = useState(true)
   const api = useApi()
 
   useEffect(() => {
-    const load = () => fetch('/api/platform-status').then(r => r.json()).then(d => { setStripeEnabled(d.stripeEnabled); setBonusEnabled(d.bonusEnabled || false) }).catch(() => {})
+    const load = () => fetch('/api/platform-status').then(r => r.json()).then(d => { setStripeEnabled(d.stripeEnabled); setBonusEnabled(d.bonusEnabled || false); setTopupsEnabled(d.topupsEnabled !== false) }).catch(() => {})
     load()
     const i = setInterval(load, 30000)
     return () => clearInterval(i)
@@ -2187,7 +2188,7 @@ function Dashboard({ me, onLogout, refreshMe }) {
         </div>
       )}
       {view === 'tournaments' && <TournamentsView me={me} />}
-      {view === 'wallet' && <WalletView refreshMe={refreshMe} stripeEnabled={stripeEnabled} />}
+      {view === 'wallet' && <WalletView refreshMe={refreshMe} stripeEnabled={stripeEnabled} topupsEnabled={topupsEnabled} />}
       {view === 'ranking' && <Ranking />}
       {view === 'profile' && (
         <Card className="glow-card p-4 sm:p-6 border-purple-500/30">
