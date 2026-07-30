@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { v4 as uuidv4 } from 'uuid'
 import Stripe from 'stripe'
 import { connectDb } from '@/lib/db'
-import { hashPassword, verifyPassword, createSession, getUserFromRequest, sanitizeUser } from '@/lib/auth'
+import { hashPassword, verifyPassword, createSession, getUserFromRequest, sanitizeUser, createInfluencerSession, getInfluencerFromRequest, sanitizeInfluencer } from '@/lib/auth'
 import { sendPushToUser, hashEndpoint } from '@/lib/push'
 import { getUploadUrl, getViewUrl } from '@/lib/r2'
 
@@ -49,12 +49,15 @@ async function logAudit(db, admin, action, targetType, targetId, details = '') {
 // reports.videoUrl stores the R2 object key (not a public URL, bucket is private) —
 // resolve it to a short-lived signed URL right before sending to the admin UI.
 async function resolveReportVideo(report) {
-  if (!report.videoUrl) return report
+  // videoData is the legacy base64-in-DB field (pre-R2) — never read by the UI anymore,
+  // but old rows still carry it and it's often several MB; drop it so admin list polling doesn't ship it.
+  const { videoData, ...rest } = report
+  if (!rest.videoUrl) return rest
   try {
-    return { ...report, videoUrl: await getViewUrl(report.videoUrl) }
+    return { ...rest, videoUrl: await getViewUrl(rest.videoUrl) }
   } catch (e) {
     console.error('Erro ao gerar URL assinada do vídeo:', e.message)
-    return report
+    return rest
   }
 }
 
@@ -72,6 +75,37 @@ async function autoFinalizeTimeout(db, room) {
   // Claimer said 'win' -> claimer wins; claimer said 'loss' -> opponent wins
   const winnerId = claim === 'win' ? claimerId : opponentId
   return await finalizeRoom(db, room, winnerId, 'timeout_single_claim')
+}
+
+// Pays each participant's referrer a cut of the platform commission for this room — lifetime
+// revenue share, triggered on every finalized bet by a referred player, forever.
+async function payReferralCommission(db, room, commissionCents) {
+  if (!commissionCents) return
+  const [creator, opponent] = await Promise.all([
+    db.collection('users').findOne({ id: room.creatorId }),
+    room.opponentId ? db.collection('users').findOne({ id: room.opponentId }) : null,
+  ])
+  const participants = [creator, opponent].filter(p => p?.referredBy)
+  if (!participants.length) return
+  // Anti-fraud: both participants referred by the same influencer → skip entirely.
+  // Prevents farming commission with two self-referred accounts playing each other.
+  if (participants.length === 2 && participants[0].referredBy === participants[1].referredBy) return
+  for (const participant of participants) {
+    const influencer = await db.collection('influencers').findOne({ id: participant.referredBy })
+    if (!influencer || influencer.banned) continue
+    const cut = Math.round(commissionCents * (influencer.commissionPercent || 0) / 100)
+    if (!cut) continue
+    const newBalance = (influencer.balanceCents || 0) + cut
+    await db.collection('influencers').updateOne({ id: influencer.id }, {
+      $set: { balanceCents: newBalance },
+      $inc: { totalEarnedCents: cut },
+    })
+    await db.collection('influencer_transactions').insertOne({
+      id: uuidv4(), influencerId: influencer.id, type: 'referral_commission', amountCents: cut,
+      roomId: room.id, referredUserId: participant.id,
+      balance: newBalance, description: `Comissão referral sala ${room.id.slice(0,8)}`, createdAt: new Date(),
+    })
+  }
 }
 
 async function finalizeRoom(db, room, winnerId, reason = 'players_agreed') {
@@ -105,6 +139,7 @@ async function finalizeRoom(db, room, winnerId, reason = 'players_agreed') {
     roomId: room.id, description: `Comissão ${(COMMISSION*100)}% sala ${room.id.slice(0,8)}`,
     createdAt: new Date(),
   })
+  await payReferralCommission(db, room, commissionCents)
   return await db.collection('rooms').findOne({ id: room.id })
 }
 
@@ -130,16 +165,22 @@ async function handleRoute(request, { params }) {
     // ===== AUTH =====
     if (route === '/auth/register' && method === 'POST') {
       const body = await request.json()
-      const { email, password, name, ffUid, ffNickname, deviceType } = body
+      const { email, password, name, ffUid, ffNickname, deviceType, ref } = body
       if (!email || !password || !name || !ffUid || !ffNickname || !deviceType) return ERR('Campos obrigatórios em falta')
       if (!['MOBILE', 'EMULADOR', 'MOBILADOR'].includes(deviceType)) return ERR('Tipo de dispositivo inválido')
       const exists = await db.collection('users').findOne({ email })
       if (exists) return ERR('Email já registado', 409)
       const { salt, hash } = hashPassword(password)
+      // Referral attribution is permanent — set once at signup, never changes afterwards
+      let referredBy = null
+      if (ref) {
+        const influencer = await db.collection('influencers').findOne({ referralCode: String(ref).toUpperCase() })
+        if (influencer && !influencer.banned) referredBy = influencer.id
+      }
       const user = {
         id: uuidv4(), email, passwordHash: hash, salt, name, ffUid, ffNickname, deviceType,
         balanceCents: 0, pendingCents: 0, totalEarningsCents: 0,
-        wins: 0, losses: 0, banned: false, isAdmin: false,
+        wins: 0, losses: 0, banned: false, isAdmin: false, referredBy,
         photoUrl: `https://api.dicebear.com/7.x/adventurer/svg?seed=${encodeURIComponent(ffNickname)}`,
         createdAt: new Date(),
       }
@@ -358,6 +399,7 @@ async function handleRoute(request, { params }) {
         if (!['EM_ANDAMENTO', 'EM_CONFLITO', 'EM_DISPUTA', 'FINALIZADA'].includes(room.status)) return ERR('Estado da sala não permite denúncia')
         if (room.status === 'FINALIZADA') {
           if (room.winnerId === user.id) return ERR('O vencedor não pode denunciar')
+          if (['admin_approved', 'report_accepted'].includes(room.finalizeReason)) return ERR('Este caso já foi analisado e decidido pela administração')
           const finishedAgo = Date.now() - new Date(room.finishedAt || 0).getTime()
           if (finishedAgo > 24 * 60 * 60 * 1000) return ERR('Prazo de denúncia expirado (24h)')
         }
@@ -367,7 +409,14 @@ async function handleRoute(request, { params }) {
           videoUrl: videoKey || null, screenshots: sc, status: 'PENDENTE',
           createdAt: new Date(),
         })
-        await db.collection('rooms').updateOne({ id: roomId }, { $set: { status: 'EM_DISPUTA', previousStatus: room.status } })
+        const roomUpdate = { status: 'EM_DISPUTA', previousStatus: room.status }
+        // Reporting mid-match ("perdi + denunciar") records the reporter's claim as a loss —
+        // holds the prize until an admin decides, instead of letting a normal claim auto-finalize first.
+        if (room.status === 'EM_ANDAMENTO') {
+          roomUpdate.claims = { ...(room.claims || {}), [user.id]: 'loss' }
+          if (!room.firstClaimAt) roomUpdate.firstClaimAt = new Date()
+        }
+        await db.collection('rooms').updateOne({ id: roomId }, { $set: roomUpdate })
         return J({ ok: true })
       }
     }
@@ -847,6 +896,87 @@ async function handleRoute(request, { params }) {
       return J({ user: sanitizeUser(u) })
     }
 
+    // ===== INFLUENCER (own login, separate from players/admin) =====
+    if (route === '/influencer/login' && method === 'POST') {
+      const { email, password } = await request.json()
+      const influencer = await db.collection('influencers').findOne({ email })
+      if (!influencer) return ERR('Credenciais inválidas', 401)
+      if (!verifyPassword(password, influencer.salt, influencer.passwordHash)) return ERR('Credenciais inválidas', 401)
+      if (influencer.banned) return ERR('Conta desativada', 403)
+      const token = await createInfluencerSession(influencer.id)
+      return J({ token, influencer: sanitizeInfluencer(influencer) })
+    }
+
+    if (route === '/influencer/me' && method === 'GET') {
+      const influencer = await getInfluencerFromRequest(request)
+      if (!influencer) return ERR('Não autenticado', 401)
+      return J({ influencer: sanitizeInfluencer(influencer) })
+    }
+
+    if (route === '/influencer/dashboard' && method === 'GET') {
+      const influencer = await getInfluencerFromRequest(request)
+      if (!influencer) return ERR('Não autenticado', 401)
+      const referredCount = await db.collection('users').countDocuments({ referredBy: influencer.id })
+      const txns = await db.collection('influencer_transactions').find({ influencerId: influencer.id }).sort({ createdAt: -1 }).limit(50).toArray()
+      const withdrawals = await db.collection('influencer_withdrawals').find({ influencerId: influencer.id }).sort({ createdAt: -1 }).limit(20).toArray()
+      return J({
+        balanceCents: influencer.balanceCents || 0,
+        pendingCents: influencer.pendingCents || 0,
+        totalEarnedCents: influencer.totalEarnedCents || 0,
+        commissionPercent: influencer.commissionPercent,
+        referralCode: influencer.referralCode,
+        referredCount,
+        transactions: txns.map(clean),
+        withdrawals: withdrawals.map(clean),
+      })
+    }
+
+    if (route === '/influencer/withdrawal-method' && method === 'GET') {
+      const influencer = await getInfluencerFromRequest(request)
+      if (!influencer) return ERR('Não autenticado', 401)
+      return J({ method: influencer.payoutType ? { fullName: influencer.payoutFullName, type: influencer.payoutType, iban: influencer.payoutIban, mbway: influencer.payoutMbway } : null })
+    }
+
+    if (route === '/influencer/withdrawal-method' && method === 'POST') {
+      const influencer = await getInfluencerFromRequest(request)
+      if (!influencer) return ERR('Não autenticado', 401)
+      const { fullName, type, iban, mbway } = await request.json()
+      if (!fullName || !fullName.trim()) return ERR('Nome completo é obrigatório')
+      if (!WITHDRAWAL_TYPES.includes(type)) return ERR('Tipo de levantamento inválido')
+      if ((type === 'IBAN' || type === 'TRANSFERENCIA') && (!iban || !iban.trim())) return ERR('IBAN é obrigatório para este tipo de levantamento')
+      if (type === 'MBWAY' && (!mbway || !mbway.trim())) return ERR('Número MB WAY é obrigatório')
+      await db.collection('influencers').updateOne({ id: influencer.id }, {
+        $set: { payoutFullName: fullName.trim(), payoutType: type, payoutIban: iban ? iban.trim() : null, payoutMbway: mbway ? mbway.trim() : null },
+      })
+      return J({ ok: true })
+    }
+
+    if (route === '/influencer/withdraw' && method === 'POST') {
+      const influencer = await getInfluencerFromRequest(request)
+      if (!influencer) return ERR('Não autenticado', 401)
+      const { amountEuros } = await request.json()
+      const cents = Math.round(parseFloat(amountEuros) * 100)
+      if (!cents || cents < 200) return ERR('Valor mínimo: 2€')
+      if (cents > (influencer.balanceCents || 0)) return ERR('Saldo insuficiente')
+      if (!influencer.payoutType) return ERR('Configura primeiro o teu método de levantamento')
+      const pending = await db.collection('influencer_withdrawals').findOne({ influencerId: influencer.id, status: { $in: ['PENDENTE', 'EM_PROCESSAMENTO'] } })
+      if (pending) return ERR('Já tens um pedido de levantamento em curso. Aguarda que seja processado.')
+      const w = {
+        id: uuidv4(), influencerId: influencer.id, amountCents: cents,
+        fullName: influencer.payoutFullName, withdrawalType: influencer.payoutType,
+        iban: influencer.payoutIban || null, mbway: influencer.payoutMbway || null,
+        status: 'PENDENTE', createdAt: new Date(),
+      }
+      await db.collection('influencer_withdrawals').insertOne(w)
+      await db.collection('influencers').updateOne({ id: influencer.id }, { $inc: { balanceCents: -cents, pendingCents: cents } })
+      await db.collection('influencer_transactions').insertOne({
+        id: uuidv4(), influencerId: influencer.id, type: 'withdrawal_request', amountCents: -cents,
+        withdrawalId: w.id, balance: (influencer.balanceCents || 0) - cents,
+        description: 'Pedido de levantamento', createdAt: new Date(),
+      })
+      return J({ withdrawal: clean(w) })
+    }
+
     // ===== ADMIN =====
     if (route.startsWith('/admin/')) {
       const admin = await getUserFromRequest(request)
@@ -1114,6 +1244,85 @@ async function handleRoute(request, { params }) {
         }
       }
 
+      // ===== ADMIN INFLUENCERS =====
+      if (route === '/admin/influencers' && method === 'GET') {
+        const list = await db.collection('influencers').find({}).sort({ createdAt: -1 }).limit(200).toArray()
+        const withCounts = await Promise.all(list.map(async inf => {
+          const referredCount = await db.collection('users').countDocuments({ referredBy: inf.id })
+          return { ...sanitizeInfluencer(inf), referredCount }
+        }))
+        return J({ influencers: withCounts })
+      }
+
+      if (route === '/admin/influencers' && method === 'POST') {
+        const { name, email, password, referralCode, commissionPercent } = await request.json()
+        if (!name?.trim() || !email?.trim() || !password) return ERR('Nome, email e password são obrigatórios')
+        const code = (referralCode || name).toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 20) || uuidv4().slice(0, 8).toUpperCase()
+        const pct = Math.min(50, Math.max(1, parseInt(commissionPercent) || 10))
+        const existingEmail = await db.collection('influencers').findOne({ email: email.trim() })
+        if (existingEmail) return ERR('Email já registado', 409)
+        const existingCode = await db.collection('influencers').findOne({ referralCode: code })
+        if (existingCode) return ERR('Código de referência já em uso — escolhe outro')
+        const { salt, hash } = hashPassword(password)
+        const inf = {
+          id: uuidv4(), email: email.trim(), passwordHash: hash, salt, name: name.trim(),
+          referralCode: code, commissionPercent: pct,
+          balanceCents: 0, pendingCents: 0, totalEarnedCents: 0, banned: false,
+          createdAt: new Date(),
+        }
+        await db.collection('influencers').insertOne(inf)
+        await logAudit(db, admin, 'influencer_created', 'influencer', inf.id, `${name} (${code}, ${pct}%)`)
+        return J({ influencer: sanitizeInfluencer(inf) })
+      }
+
+      const infMatch = route.match(/^\/admin\/influencers\/([^\/]+)\/(ban|unban)$/)
+      if (infMatch && method === 'POST') {
+        const infId = infMatch[1]
+        const banned = infMatch[2] === 'ban'
+        await db.collection('influencers').updateOne({ id: infId }, { $set: { banned } })
+        await logAudit(db, admin, banned ? 'influencer_banned' : 'influencer_unbanned', 'influencer', infId, '')
+        return J({ ok: true })
+      }
+
+      if (route === '/admin/influencer-withdrawals' && method === 'GET') {
+        const url = new URL(request.url)
+        const status = url.searchParams.get('status')
+        const filter = status && status !== 'all' ? { status } : {}
+        const list = await db.collection('influencer_withdrawals').find(filter).sort({ createdAt: -1 }).limit(200).toArray()
+        const ids = [...new Set(list.map(w => w.influencerId))]
+        const infs = await db.collection('influencers').find({ id: { $in: ids } }).toArray()
+        const imap = Object.fromEntries(infs.map(i => [i.id, { id: i.id, name: i.name, email: i.email, referralCode: i.referralCode }]))
+        return J({ withdrawals: list.map(w => ({ ...clean(w), influencer: imap[w.influencerId] })) })
+      }
+
+      const infWdMatch = route.match(/^\/admin\/influencer-withdrawal\/([^\/]+)\/(paid|reject)$/)
+      if (infWdMatch && method === 'POST') {
+        const wId = infWdMatch[1]
+        const wAction = infWdMatch[2]
+        const w = await db.collection('influencer_withdrawals').findOne({ id: wId })
+        if (!w) return ERR('Pedido de levantamento não encontrado', 404)
+        if (!['PENDENTE', 'EM_PROCESSAMENTO'].includes(w.status)) return ERR('Este pedido já foi processado')
+
+        if (wAction === 'paid') {
+          await db.collection('influencer_withdrawals').updateOne({ id: wId }, { $set: { status: 'PAGO', paidAt: new Date() } })
+          await db.collection('influencers').updateOne({ id: w.influencerId }, { $inc: { pendingCents: -w.amountCents } })
+          await logAudit(db, admin, 'influencer_withdrawal_paid', 'influencer_withdrawal', wId, `valor=${(w.amountCents/100).toFixed(2)}eur`)
+          return J({ ok: true })
+        }
+
+        if (wAction === 'reject') {
+          const { reason } = await request.json()
+          await db.collection('influencer_withdrawals').updateOne({ id: wId }, { $set: { status: 'REJEITADO', rejectionReason: reason || '' } })
+          await db.collection('influencers').updateOne({ id: w.influencerId }, { $inc: { balanceCents: w.amountCents, pendingCents: -w.amountCents } })
+          await db.collection('influencer_transactions').insertOne({
+            id: uuidv4(), influencerId: w.influencerId, type: 'withdrawal_refund', amountCents: w.amountCents,
+            withdrawalId: wId, description: `Levantamento rejeitado: ${reason || 'sem motivo indicado'}`, createdAt: new Date(),
+          })
+          await logAudit(db, admin, 'influencer_withdrawal_rejected', 'influencer_withdrawal', wId, reason || '')
+          return J({ ok: true })
+        }
+      }
+
       // ===== ADMIN TOURNAMENTS =====
       if (route === '/admin/tournaments' && method === 'GET') {
         const list = await db.collection('tournaments').find({}).sort({ createdAt: -1 }).limit(50).toArray()
@@ -1190,6 +1399,19 @@ async function handleRoute(request, { params }) {
           return J({ ok: true })
         }
 
+        if (tAction === 'delete' && method === 'POST') {
+          if (tournament.status === 'EM_ANDAMENTO') return ERR('Não podes eliminar um torneio em curso — cancela primeiro para reembolsar os jogadores')
+          const count = await db.collection('tournament_participants').countDocuments({ tournamentId: tId })
+          if (count > 0 && !['CANCELADO', 'FINALIZADO'].includes(tournament.status)) {
+            return ERR('Este torneio tem jogadores inscritos com taxa paga — cancela primeiro para reembolsar antes de eliminar')
+          }
+          await db.collection('tournament_matches').deleteMany({ tournamentId: tId })
+          await db.collection('tournament_participants').deleteMany({ tournamentId: tId })
+          await db.collection('tournaments').deleteMany({ id: tId })
+          await logAudit(db, admin, 'tournament_deleted', 'tournament', tId, tournament.name)
+          return J({ ok: true })
+        }
+
         const adminMatchResolve = tAction?.match(/^match\/([^\/]+)\/resolve$/)
         if (adminMatchResolve && method === 'POST') {
           const matchId = adminMatchResolve[1]
@@ -1204,7 +1426,14 @@ async function handleRoute(request, { params }) {
       }
 
       if (route === '/admin/bonus-eligible' && method === 'GET') {
-        // First 3 unique players (creators) whose rooms were finalized, ordered by finishedAt
+        // Welcome bonus is capped at the first 3 players ever credited — once that many
+        // "bonus" transactions exist, the programme is over, regardless of new finishers.
+        const creditedCount = await db.collection('transactions').countDocuments({ type: 'bonus' })
+        const remaining = 3 - creditedCount
+        if (remaining <= 0) return J({ eligible: [] })
+        const creditedTxns = await db.collection('transactions').find({ type: 'bonus' }).toArray()
+        const creditedIds = new Set(creditedTxns.map(t => t.userId))
+        // First unique players (creators) whose rooms were finalized, ordered by finishedAt, skipping already-credited ones
         const finalized = await db.collection('rooms')
           .find({ status: 'FINALIZADA' })
           .sort({ finishedAt: 1 })
@@ -1212,10 +1441,11 @@ async function handleRoute(request, { params }) {
           .toArray()
         const seen = []
         for (const r of finalized) {
+          if (creditedIds.has(r.creatorId)) continue
           if (!seen.find(s => s.userId === r.creatorId)) {
             seen.push({ userId: r.creatorId, roomId: r.id, finishedAt: r.finishedAt })
           }
-          if (seen.length === 3) break
+          if (seen.length === remaining) break
         }
         const ids = seen.map(s => s.userId)
         const users = await db.collection('users').find({ id: { $in: ids } }).toArray()
@@ -1226,6 +1456,10 @@ async function handleRoute(request, { params }) {
       if (route === '/admin/bonus-credit' && method === 'POST') {
         const { userId, amountCents } = await request.json()
         if (!userId || !amountCents) return ERR('userId e amountCents obrigatórios')
+        const alreadyCredited = await db.collection('transactions').findOne({ userId, type: 'bonus' })
+        if (alreadyCredited) return ERR('Este jogador já recebeu o bónus de boas-vindas')
+        const creditedCount = await db.collection('transactions').countDocuments({ type: 'bonus' })
+        if (creditedCount >= 3) return ERR('O bónus de boas-vindas já foi atribuído aos primeiros 3 jogadores')
         const target = await db.collection('users').findOne({ id: userId })
         if (!target) return ERR('Utilizador não encontrado', 404)
         const newBalance = (target.balanceCents || 0) + amountCents

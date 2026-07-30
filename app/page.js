@@ -439,7 +439,8 @@ function AuthForm({ mode, onSwitch, onSuccess }) {
     setLoading(true)
     try {
       const path = mode === 'login' ? '/auth/login' : '/auth/register'
-      const data = await api(path, { method: 'POST', body: JSON.stringify(form) })
+      const body = mode === 'register' ? { ...form, ref: localStorage.getItem('ff_ref') || undefined } : form
+      const data = await api(path, { method: 'POST', body: JSON.stringify(body) })
       localStorage.setItem('ff_token', data.token)
       toast.success(mode === 'login' ? 'Bem-vindo de volta!' : 'Conta criada!')
       onSuccess(data.user)
@@ -804,7 +805,9 @@ function RoomDetail({ roomId, me, onBack, refreshMe }) {
         reader.onerror = () => reject(new Error('Erro a ler ' + f.name))
         reader.readAsDataURL(f)
       })
-      const screenshots = await Promise.all((report.files || []).slice(0, 4).map(f => readFile(f, 2)))
+      // Compressed (max 1280px, JPEG 75%) instead of sent raw — a phone screenshot can be several MB
+      // uncompressed, and these get embedded in every admin list poll, not just when opened.
+      const screenshots = await Promise.all((report.files || []).slice(0, 4).map(f => compressImage(f)))
       let videoKey = null
       if (report.videoFile) {
         if (report.videoFile.size > 1024 * 1024 * 1024) throw new Error('Vídeo excede 1GB')
@@ -899,27 +902,23 @@ function RoomDetail({ roomId, me, onBack, refreshMe }) {
           )}
           {room.status === 'EM_ANDAMENTO' && isParticipant && !myClaim && (
             <div className="space-y-2">
+              <Button onClick={() => claim('win')} disabled={busy} className="w-full h-12 bg-green-600 hover:bg-green-700 font-bold">
+                <Trophy className="w-5 h-5 mr-2" /> Eu Ganhei
+              </Button>
               <div className="grid grid-cols-2 gap-3">
-                <Button onClick={() => claim('win')} disabled={busy} className="h-12 bg-green-600 hover:bg-green-700 font-bold">
-                  <Trophy className="w-5 h-5 mr-2" /> Eu Ganhei
-                </Button>
                 <Button onClick={() => claim('loss')} disabled={busy} variant="destructive" className="h-12 font-bold">
                   <XCircle className="w-5 h-5 mr-2" /> Eu Perdi
                 </Button>
+                <Button onClick={() => setReportOpen(true)} disabled={busy} variant="outline" className="h-12 font-bold border-orange-500/40 text-orange-300 hover:bg-orange-500/10">
+                  <AlertTriangle className="w-5 h-5 mr-2" /> Perdi + Denunciar
+                </Button>
               </div>
-              <Button variant="outline" onClick={() => setReportOpen(true)} className="w-full border-orange-500/40 text-orange-300 hover:bg-orange-500/10">
-                <AlertTriangle className="w-4 h-4 mr-2" /> Denunciar Problema
-              </Button>
+              <p className="text-xs text-muted-foreground text-center px-2">"Perdi + Denunciar" mantém o prémio retido até um admin analisar as provas — usa apenas se achas que houve trapaça/hack.</p>
             </div>
           )}
           {room.status === 'EM_ANDAMENTO' && isParticipant && myClaim && (
-            <div className="space-y-2">
-              <div className="text-center glow-card p-4 rounded-lg">
-                A analisar a resposta do outro jogador...
-              </div>
-              <Button variant="outline" onClick={() => setReportOpen(true)} className="w-full border-orange-500/40 text-orange-300 hover:bg-orange-500/10">
-                <AlertTriangle className="w-4 h-4 mr-2" /> Denunciar Problema
-              </Button>
+            <div className="text-center glow-card p-4 rounded-lg">
+              A analisar a resposta do outro jogador...
             </div>
           )}
           {room.status === 'FINALIZADA' && (
@@ -933,7 +932,7 @@ function RoomDetail({ roomId, me, onBack, refreshMe }) {
                 {room.winnerId === creator?.id ? creator?.ffNickname : opponent?.ffNickname}
               </div>
               <div className="text-green-300 mt-2">Prémio: {fmt(room.prizeCents)}</div>
-              {isParticipant && me?.id && room.winnerId && room.winnerId !== me.id && myClaim !== 'loss' && (
+              {isParticipant && me?.id && room.winnerId && room.winnerId !== me.id && myClaim !== 'loss' && !['admin_approved', 'report_accepted'].includes(room.finalizeReason) && (
                 <div className="mt-4 pt-4 border-t border-red-500/30">
                   <p className="text-sm text-muted-foreground mb-3">Achas que houve trapaça? Tens 24h para denunciar com provas.</p>
                   <Button onClick={() => setReportOpen(true)} variant="outline" className="border-red-500/50 text-red-300 hover:bg-red-500/10">
@@ -2232,6 +2231,14 @@ function App() {
     if (!t) { setLoading(false); return }
     refreshMe().finally(() => setLoading(false))
   }, [refreshMe])
+
+  // Capture ?ref=CODE from an influencer's shared link — stored so it survives browsing
+  // before the visitor actually registers, and is sent along at signup for attribution.
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const ref = new URLSearchParams(window.location.search).get('ref')
+    if (ref) localStorage.setItem('ff_ref', ref)
+  }, [])
 
   const logout = () => { localStorage.removeItem('ff_token'); setMe(null); setAuthView(null); router.replace('/') }
 

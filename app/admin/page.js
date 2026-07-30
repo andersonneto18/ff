@@ -9,7 +9,8 @@ import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
-import { Shield, LayoutDashboard, Gamepad2, AlertTriangle, Users, LogOut, Flame, Coins, Activity, CheckCircle2, XCircle, Ban, ShieldCheck, Crown, Wallet as WalletIcon, Image as ImageIcon, Video, Scale, MessageSquare, Landmark, ClipboardList, TrendingUp, ArrowDownLeft, ArrowUpRight, CreditCard, Smartphone, Copy, Send } from 'lucide-react'
+import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogFooter, AlertDialogTitle, AlertDialogDescription, AlertDialogAction, AlertDialogCancel } from '@/components/ui/alert-dialog'
+import { Shield, LayoutDashboard, Gamepad2, AlertTriangle, Users, LogOut, Flame, Coins, Activity, CheckCircle2, XCircle, Ban, ShieldCheck, Crown, Wallet as WalletIcon, Image as ImageIcon, Video, Scale, MessageSquare, Landmark, ClipboardList, TrendingUp, ArrowDownLeft, ArrowUpRight, CreditCard, Smartphone, Copy, Send, Sparkles } from 'lucide-react'
 
 const fmt = (cents) => `${((cents || 0) / 100).toFixed(2)}€`
 
@@ -27,6 +28,41 @@ function api(path, opts = {}) {
     if (!r.ok) throw new Error(data.error || 'Erro')
     return data
   })
+}
+
+// Promise-based replacement for window.confirm(), styled to match the rest of the admin UI.
+// Named askConfirm (not confirm) to avoid clashing with unrelated local `confirm` functions in some sections.
+function useConfirm() {
+  const [dialog, setDialog] = useState(null)
+  const resolveRef = useRef(null)
+
+  const askConfirm = useCallback((message) => new Promise((resolve) => {
+    resolveRef.current = resolve
+    setDialog({ message })
+  }), [])
+
+  const respond = (ok) => {
+    resolveRef.current?.(ok)
+    resolveRef.current = null
+    setDialog(null)
+  }
+
+  const ConfirmDialog = (
+    <AlertDialog open={!!dialog} onOpenChange={(open) => !open && respond(false)}>
+      <AlertDialogContent className="bg-zinc-900 border-zinc-800 text-white">
+        <AlertDialogHeader>
+          <AlertDialogTitle>Confirmar ação</AlertDialogTitle>
+          <AlertDialogDescription className="text-zinc-400">{dialog?.message}</AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel onClick={() => respond(false)} className="bg-zinc-800 border-zinc-700 text-white hover:bg-zinc-700 hover:text-white">Cancelar</AlertDialogCancel>
+          <AlertDialogAction onClick={() => respond(true)} className="bg-purple-600 hover:bg-purple-700">Confirmar</AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  )
+
+  return { askConfirm, ConfirmDialog }
 }
 
 const STATUS_COLORS = {
@@ -93,6 +129,7 @@ function AdminLogin({ onSuccess }) {
 
 // -------- DASHBOARD --------
 function DashboardSection() {
+  const { askConfirm, ConfirmDialog } = useConfirm()
   const [stats, setStats] = useState(null)
   const [bonusEligible, setBonusEligible] = useState([])
   const [creditingBonus, setCreditingBonus] = useState(null)
@@ -296,7 +333,7 @@ function DashboardSection() {
           <span className="font-bold text-white text-sm">Bónus de Boas-Vindas — Primeiros 3 Jogadores</span>
         </div>
         {bonusEligible.length === 0 ? (
-          <div className="text-sm text-zinc-500">Ainda nenhuma partida finalizada.</div>
+          <div className="text-sm text-zinc-500">Sem jogadores elegíveis — ou ainda nenhuma partida finalizada, ou o bónus já foi atribuído aos 3 primeiros.</div>
         ) : (
           <div className="space-y-2">
             {bonusEligible.map((e, i) => (
@@ -309,11 +346,12 @@ function DashboardSection() {
                   </div>
                 </div>
                 <Button size="sm" disabled={creditingBonus === e.userId} onClick={async () => {
-                  if (!window.confirm(`Creditar 1€ de bónus a ${e.user?.ffNickname}?`)) return
+                  if (!(await askConfirm(`Creditar 1€ de bónus a ${e.user?.ffNickname}?`))) return
                   setCreditingBonus(e.userId)
                   try {
                     await api('/admin/bonus-credit', { method: 'POST', body: JSON.stringify({ userId: e.userId, amountCents: 100 }) })
                     toast.success(`1€ creditado a ${e.user?.ffNickname}!`)
+                    setBonusEligible(prev => prev.filter(x => x.userId !== e.userId))
                   } catch (err) { toast.error(err.message) }
                   finally { setCreditingBonus(null) }
                 }} className="bg-yellow-500 hover:bg-yellow-600 text-black font-bold shrink-0">
@@ -363,6 +401,7 @@ function DashboardSection() {
           </div>
         </div>
       </Card>
+      {ConfirmDialog}
     </div>
   )
 }
@@ -451,6 +490,7 @@ function RoomsSection() {
 
 // -------- REPORTS / DENÚNCIAS --------
 function ReportsSection() {
+  const { askConfirm, ConfirmDialog } = useConfirm()
   const [reports, setReports] = useState([])
   const [filter, setFilter] = useState('PENDENTE')
   const [busy, setBusy] = useState(false)
@@ -462,7 +502,7 @@ function ReportsSection() {
   const filtered = filter === 'all' ? reports : reports.filter(r => r.status === filter)
 
   const act = async (reportId, action) => {
-    if (!confirm(action === 'accept' ? 'Aceitar denúncia? O denunciante passará a vencedor.' : 'Rejeitar denúncia?')) return
+    if (!(await askConfirm(action === 'accept' ? 'Aceitar denúncia? O denunciante passará a vencedor.' : 'Rejeitar denúncia?'))) return
     setBusy(true)
     try {
       await api('/admin/report/' + reportId, { method: 'POST', body: JSON.stringify({ action }) })
@@ -473,7 +513,7 @@ function ReportsSection() {
   }
 
   const clearHistory = async () => {
-    if (!window.confirm('Apagar todas as denúncias já processadas (aceites e rejeitadas)? Esta ação é irreversível.')) return
+    if (!(await askConfirm('Apagar todas as denúncias já processadas (aceites e rejeitadas)? Esta ação é irreversível.'))) return
     setBusy(true)
     try {
       await api('/admin/reports/clear', { method: 'POST', body: '{}' })
@@ -588,6 +628,7 @@ function ReportsSection() {
 
 // -------- DISPUTES / CONFLITOS --------
 function DisputesSection() {
+  const { askConfirm, ConfirmDialog } = useConfirm()
   const [disputes, setDisputes] = useState([])
   const [busy, setBusy] = useState(false)
   const [videoModal, setVideoModal] = useState(null)
@@ -598,7 +639,7 @@ function DisputesSection() {
   useEffect(() => { load(); const i = setInterval(load, 8000); return () => clearInterval(i) }, [load])
 
   const resolve = async (roomId, action, winnerId, label) => {
-    if (!confirm(action === 'cancel' ? 'Cancelar a partida e reembolsar ambos os jogadores?' : `Declarar "${label}" vencedor e distribuir o prémio?`)) return
+    if (!(await askConfirm(action === 'cancel' ? 'Cancelar a partida e reembolsar ambos os jogadores?' : `Declarar "${label}" vencedor e distribuir o prémio?`))) return
     setBusy(true)
     try {
       await api('/admin/dispute/' + roomId, { method: 'POST', body: JSON.stringify({ action, winnerId }) })
@@ -720,6 +761,7 @@ function DisputesSection() {
           {videoModal && <video src={videoModal} controls autoPlay className="w-full rounded border border-zinc-700 max-h-[70vh]" />}
         </DialogContent>
       </Dialog>
+      {ConfirmDialog}
     </div>
   )
 }
@@ -829,6 +871,7 @@ function PlayersSection() {
 
 // -------- WITHDRAWALS / LEVANTAMENTOS --------
 function WithdrawalsSection() {
+  const { askConfirm, ConfirmDialog } = useConfirm()
   const [list, setList] = useState([])
   const [filter, setFilter] = useState('PENDENTE')
   const [busy, setBusy] = useState(false)
@@ -851,7 +894,7 @@ function WithdrawalsSection() {
   }
 
   const markPaid = async (id) => {
-    if (!confirm('Confirma que já efetuaste o pagamento manualmente? Isto marca o pedido como Pago.')) return
+    if (!(await askConfirm('Confirma que já efetuaste o pagamento manualmente? Isto marca o pedido como Pago.'))) return
     setBusy(true)
     try { await api(`/admin/withdrawal/${id}/paid`, { method: 'POST', body: '{}' }); toast.success('Marcado como pago'); load() }
     catch (e) { toast.error(e.message) } finally { setBusy(false) }
@@ -953,6 +996,7 @@ function WithdrawalsSection() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      {ConfirmDialog}
     </div>
   )
 }
@@ -990,6 +1034,7 @@ function AuditSection() {
 
 // -------- MB WAY TOP-UPS --------
 function MbwayTopupsSection() {
+  const { askConfirm, ConfirmDialog } = useConfirm()
   const [list, setList] = useState([])
   const [filter, setFilter] = useState('PENDENTE')
   const [busy, setBusy] = useState(false)
@@ -1004,10 +1049,12 @@ function MbwayTopupsSection() {
       setList(d.topups || [])
     } catch (e) { toast.error(e.message) }
   }, [filter])
-  useEffect(() => { load(); const i = setInterval(load, 8000); return () => clearInterval(i) }, [load])
+  // Slower poll than other sections — each record carries a full proof image, so this is the
+  // heaviest list to re-fetch; MB WAY confirmations aren't second-sensitive.
+  useEffect(() => { load(); const i = setInterval(load, 20000); return () => clearInterval(i) }, [load])
 
   const confirm = async (id) => {
-    if (!window.confirm('Confirmar que recebeste este pagamento e creditar o saldo do jogador?')) return
+    if (!(await askConfirm('Confirmar que recebeste este pagamento e creditar o saldo do jogador?'))) return
     setBusy(true)
     try { await api(`/admin/mbway-topup/${id}/confirm`, { method: 'POST', body: '{}' }); toast.success('Carregamento confirmado e saldo creditado'); load() }
     catch (e) { toast.error(e.message) } finally { setBusy(false) }
@@ -1025,7 +1072,7 @@ function MbwayTopupsSection() {
   }
 
   const clearMbwayHistory = async () => {
-    if (!window.confirm('Apagar todos os comprovativos MB WAY já processados (confirmados e rejeitados)? Esta ação é irreversível.')) return
+    if (!(await askConfirm('Apagar todos os comprovativos MB WAY já processados (confirmados e rejeitados)? Esta ação é irreversível.'))) return
     setBusy(true)
     try {
       await api('/admin/mbway-topups/clear', { method: 'POST', body: '{}' })
@@ -1129,12 +1176,14 @@ function MbwayTopupsSection() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      {ConfirmDialog}
     </div>
   )
 }
 
 // -------- TOURNAMENTS --------
 function TournamentsSection() {
+  const { askConfirm, ConfirmDialog } = useConfirm()
   const [list, setList] = useState([])
   const [creating, setCreating] = useState(false)
   const [form, setForm] = useState({ name: '', description: '', entryFeeEuros: '5', maxPlayers: '8', mode: '', server: '', weapons: '', platform: 'Misto', rules: '', characters: '', pets: '' })
@@ -1168,19 +1217,25 @@ function TournamentsSection() {
   }
 
   const start = async (t) => {
-    if (!window.confirm(`Iniciar torneio "${t.name}" com ${t.currentPlayers} jogadores?`)) return
+    if (!(await askConfirm(`Iniciar torneio "${t.name}" com ${t.currentPlayers} jogadores?`))) return
     setBusy(true)
     try { await api(`/admin/tournaments/${t.id}/start`, { method: 'POST', body: '{}' }); toast.success('Torneio iniciado!'); load(); loadDetails(t.id) } catch (e) { toast.error(e.message) } finally { setBusy(false) }
   }
 
   const cancel = async (t) => {
-    if (!window.confirm(`Cancelar torneio "${t.name}"? Os jogadores serão reembolsados.`)) return
+    if (!(await askConfirm(`Cancelar torneio "${t.name}"? Os jogadores serão reembolsados.`))) return
     setBusy(true)
     try { await api(`/admin/tournaments/${t.id}/cancel`, { method: 'POST', body: '{}' }); toast.success('Torneio cancelado e reembolsos efetuados'); load() } catch (e) { toast.error(e.message) } finally { setBusy(false) }
   }
 
+  const remove = async (t) => {
+    if (!(await askConfirm(`Eliminar o torneio "${t.name}" definitivamente? Esta ação não pode ser desfeita.`))) return
+    setBusy(true)
+    try { await api(`/admin/tournaments/${t.id}/delete`, { method: 'POST', body: '{}' }); toast.success('Torneio eliminado'); if (selected === t.id) setSelected(null); load() } catch (e) { toast.error(e.message) } finally { setBusy(false) }
+  }
+
   const resolveMatch = async (tId, matchId, winnerId, nick) => {
-    if (!window.confirm(`Declarar ${nick} como vencedor?`)) return
+    if (!(await askConfirm(`Declarar ${nick} como vencedor?`))) return
     try { await api(`/admin/tournaments/${tId}/match/${matchId}/resolve`, { method: 'POST', body: JSON.stringify({ winnerId }) }); toast.success('Partida resolvida'); loadDetails(tId) } catch (e) { toast.error(e.message) }
   }
 
@@ -1271,6 +1326,11 @@ function TournamentsSection() {
               {['ABERTO','EM_ANDAMENTO'].includes(t.status) && (
                 <Button size="sm" variant="outline" onClick={() => cancel(t)} className="border-red-500/40 text-red-300">Cancelar</Button>
               )}
+              {t.status !== 'EM_ANDAMENTO' && (
+                <Button size="sm" variant="outline" disabled={busy} onClick={() => remove(t)} className="border-zinc-700 text-zinc-400 hover:bg-red-500/10 hover:text-red-300 hover:border-red-500/40">
+                  🗑️ Eliminar
+                </Button>
+              )}
             </div>
 
             {selected === t.id && details && (
@@ -1326,12 +1386,14 @@ function TournamentsSection() {
         ))}
         {!list.length && <div className="text-zinc-500 col-span-2 text-center py-8">Sem torneios criados ainda.</div>}
       </div>
+      {ConfirmDialog}
     </div>
   )
 }
 
 // -------- SUPPORT --------
 function SupportSection() {
+  const { askConfirm, ConfirmDialog } = useConfirm()
   const [chats, setChats] = useState([])
   const [active, setActive] = useState(null)
   const [text, setText] = useState('')
@@ -1359,7 +1421,7 @@ function SupportSection() {
   }
 
   const clearChat = async (userId) => {
-    if (!window.confirm('Apagar esta conversa?')) return
+    if (!(await askConfirm('Apagar esta conversa?'))) return
     try {
       await api('/admin/support/clear', { method: 'POST', body: JSON.stringify({ userId }) })
       if (active === userId) setActive(null)
@@ -1437,6 +1499,205 @@ function SupportSection() {
           </>
         )}
       </div>
+      {ConfirmDialog}
+    </div>
+  )
+}
+
+// -------- INFLUENCERS / PARCEIROS --------
+function InfluencerWithdrawalsPanel() {
+  const { askConfirm, ConfirmDialog } = useConfirm()
+  const [list, setList] = useState([])
+  const [filter, setFilter] = useState('PENDENTE')
+  const [busy, setBusy] = useState(false)
+  const [rejectTarget, setRejectTarget] = useState(null)
+  const [rejectReason, setRejectReason] = useState('')
+
+  const load = useCallback(async () => {
+    try {
+      const q = filter === 'all' ? '' : `?status=${filter}`
+      const d = await api('/admin/influencer-withdrawals' + q)
+      setList(d.withdrawals || [])
+    } catch (e) { toast.error(e.message) }
+  }, [filter])
+  useEffect(() => { load(); const i = setInterval(load, 8000); return () => clearInterval(i) }, [load])
+
+  const markPaid = async (id) => {
+    if (!(await askConfirm('Confirma que já efetuaste o pagamento manualmente? Isto marca o pedido como Pago.'))) return
+    setBusy(true)
+    try { await api(`/admin/influencer-withdrawal/${id}/paid`, { method: 'POST', body: '{}' }); toast.success('Marcado como pago'); load() }
+    catch (e) { toast.error(e.message) } finally { setBusy(false) }
+  }
+
+  const openReject = (id) => { setRejectReason(''); setRejectTarget(id) }
+  const confirmReject = async () => {
+    if (!rejectReason.trim()) { toast.error('Indica o motivo da rejeição'); return }
+    setBusy(true)
+    try {
+      await api(`/admin/influencer-withdrawal/${rejectTarget}/reject`, { method: 'POST', body: JSON.stringify({ reason: rejectReason.trim() }) })
+      toast.success('Pedido rejeitado e saldo devolvido')
+      setRejectTarget(null)
+      load()
+    } catch (e) { toast.error(e.message) } finally { setBusy(false) }
+  }
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
+        <div className="flex gap-1 flex-wrap">
+          {[['PENDENTE','Pendentes'],['PAGO','Pagos'],['REJEITADO','Rejeitados'],['all','Todos']].map(([k, l]) => (
+            <Button key={k} size="sm" variant={filter === k ? 'default' : 'outline'} onClick={() => setFilter(k)} className={filter === k ? 'bg-purple-600' : 'border-zinc-700 text-zinc-300'}>{l}</Button>
+          ))}
+        </div>
+      </div>
+      <div className="space-y-3">
+        {list.map(w => {
+          const methodLabel = w.withdrawalType === 'MBWAY' ? `MB WAY: ${w.mbway || '-'}` : `IBAN: ${w.iban || '-'}`
+          return (
+            <Card key={w.id} className="bg-zinc-900 border-zinc-800 p-4">
+              <div className="flex items-center justify-between flex-wrap gap-3 mb-3">
+                <div>
+                  <div className="text-white font-bold">{w.influencer?.name || w.fullName}</div>
+                  <div className="text-xs text-zinc-500">{w.influencer?.email} · {w.influencer?.referralCode}</div>
+                </div>
+                <div className="text-2xl font-black text-purple-300">{fmt(w.amountCents)}</div>
+                <Badge variant="outline" className={WITHDRAWAL_STATUS_COLORS[w.status] || ''}>{w.status}</Badge>
+              </div>
+              <div className="bg-zinc-800/60 rounded p-3 text-sm mb-3">
+                <div className="text-xs text-zinc-400 mb-1">Método de levantamento</div>
+                <div className="text-zinc-200">{methodLabel}</div>
+                <div className="text-xs text-zinc-500">Titular: {w.fullName}</div>
+              </div>
+              {w.status === 'REJEITADO' && (
+                <div className="text-xs text-red-300 mb-2">Rejeitado: {w.rejectionReason}</div>
+              )}
+              {w.status === 'PENDENTE' && (
+                <div className="flex gap-2 flex-wrap pt-2 border-t border-zinc-800">
+                  <Button onClick={() => markPaid(w.id)} disabled={busy} className="bg-green-600 hover:bg-green-700">
+                    <CheckCircle2 className="w-4 h-4 mr-2" /> Pagar
+                  </Button>
+                  <Button onClick={() => openReject(w.id)} disabled={busy} variant="destructive">
+                    <XCircle className="w-4 h-4 mr-2" /> Rejeitar
+                  </Button>
+                </div>
+              )}
+            </Card>
+          )
+        })}
+        {!list.length && <Card className="bg-zinc-900 border-zinc-800 p-8 text-center text-zinc-500">Sem pedidos para mostrar.</Card>}
+      </div>
+
+      <Dialog open={!!rejectTarget} onOpenChange={(open) => !open && setRejectTarget(null)}>
+        <DialogContent className="bg-zinc-900 border-zinc-800 text-white">
+          <DialogHeader><DialogTitle>Rejeitar levantamento</DialogTitle></DialogHeader>
+          <div className="space-y-2">
+            <Label htmlFor="infRejectReason">Motivo da rejeição</Label>
+            <Input id="infRejectReason" value={rejectReason} onChange={e => setRejectReason(e.target.value)}
+              placeholder="Dados de pagamento inválidos..." className="bg-zinc-800 border-zinc-700 text-white" />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRejectTarget(null)} className="border-zinc-700">Cancelar</Button>
+            <Button onClick={confirmReject} disabled={busy} variant="destructive">
+              <XCircle className="w-4 h-4 mr-2" /> Rejeitar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      {ConfirmDialog}
+    </div>
+  )
+}
+
+function InfluencersSection() {
+  const { askConfirm, ConfirmDialog } = useConfirm()
+  const [tab, setTab] = useState('list')
+  const [list, setList] = useState([])
+  const [creating, setCreating] = useState(false)
+  const [form, setForm] = useState({ name: '', email: '', password: '', referralCode: '', commissionPercent: '10' })
+  const [busy, setBusy] = useState(false)
+
+  const load = useCallback(async () => {
+    try { const d = await api('/admin/influencers'); setList(d.influencers || []) } catch (e) { toast.error(e.message) }
+  }, [])
+  useEffect(() => { if (tab === 'list') load() }, [load, tab])
+
+  const create = async (e) => {
+    e.preventDefault(); setBusy(true)
+    try {
+      await api('/admin/influencers', { method: 'POST', body: JSON.stringify(form) })
+      toast.success('Influenciador criado')
+      setCreating(false); setForm({ name: '', email: '', password: '', referralCode: '', commissionPercent: '10' })
+      load()
+    } catch (err) { toast.error(err.message) } finally { setBusy(false) }
+  }
+
+  const toggleBan = async (inf) => {
+    if (!(await askConfirm(`${inf.banned ? 'Reativar' : 'Desativar'} o influenciador "${inf.name}"?`))) return
+    setBusy(true)
+    try { await api(`/admin/influencers/${inf.id}/${inf.banned ? 'unban' : 'ban'}`, { method: 'POST', body: '{}' }); load() }
+    catch (e) { toast.error(e.message) } finally { setBusy(false) }
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <h1 className="text-3xl font-bold text-white">Influenciadores</h1>
+        <div className="flex gap-2 flex-wrap">
+          <Button size="sm" variant={tab === 'list' ? 'default' : 'outline'} onClick={() => setTab('list')} className={tab === 'list' ? 'bg-purple-600' : 'border-zinc-700 text-zinc-300'}>Parceiros</Button>
+          <Button size="sm" variant={tab === 'withdrawals' ? 'default' : 'outline'} onClick={() => setTab('withdrawals')} className={tab === 'withdrawals' ? 'bg-purple-600' : 'border-zinc-700 text-zinc-300'}>Levantamentos</Button>
+          {tab === 'list' && <Button size="sm" onClick={() => setCreating(true)} className="bg-gradient-to-r from-purple-600 to-blue-500">+ Criar Influenciador</Button>}
+        </div>
+      </div>
+
+      {tab === 'withdrawals' ? <InfluencerWithdrawalsPanel /> : (
+        <>
+          {creating && (
+            <Card className="bg-zinc-900 border-purple-500/30 p-5">
+              <h3 className="font-bold text-white mb-4">Novo Influenciador</h3>
+              <form onSubmit={create} className="space-y-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div><Label className="text-zinc-300">Nome *</Label><input value={form.name} onChange={e => setForm({...form, name: e.target.value})} required className="w-full mt-1 bg-zinc-800 border border-zinc-700 text-white rounded-md px-3 py-2 text-sm focus:outline-none focus:border-purple-500" /></div>
+                  <div><Label className="text-zinc-300">Email *</Label><input type="email" value={form.email} onChange={e => setForm({...form, email: e.target.value})} required className="w-full mt-1 bg-zinc-800 border border-zinc-700 text-white rounded-md px-3 py-2 text-sm focus:outline-none focus:border-purple-500" /></div>
+                  <div><Label className="text-zinc-300">Palavra-passe *</Label><input type="password" value={form.password} onChange={e => setForm({...form, password: e.target.value})} required className="w-full mt-1 bg-zinc-800 border border-zinc-700 text-white rounded-md px-3 py-2 text-sm focus:outline-none focus:border-purple-500" /></div>
+                  <div><Label className="text-zinc-300">Código de referência</Label><input value={form.referralCode} onChange={e => setForm({...form, referralCode: e.target.value})} placeholder="ex: NETO2026 (gerado do nome se vazio)" className="w-full mt-1 bg-zinc-800 border border-zinc-700 text-white rounded-md px-3 py-2 text-sm focus:outline-none focus:border-purple-500" /></div>
+                  <div><Label className="text-zinc-300">Comissão (% da receita da plataforma)</Label><input type="number" min="1" max="50" value={form.commissionPercent} onChange={e => setForm({...form, commissionPercent: e.target.value})} className="w-full mt-1 bg-zinc-800 border border-zinc-700 text-white rounded-md px-3 py-2 text-sm focus:outline-none focus:border-purple-500" /></div>
+                </div>
+                <div className="flex gap-2">
+                  <Button type="submit" disabled={busy} className="bg-purple-600">{busy ? 'A criar...' : 'Criar'}</Button>
+                  <Button type="button" variant="outline" onClick={() => setCreating(false)} className="border-zinc-700">Cancelar</Button>
+                </div>
+              </form>
+            </Card>
+          )}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            {list.map(inf => (
+              <Card key={inf.id} className="bg-zinc-900 border-zinc-800 p-4">
+                <div className="flex items-start justify-between gap-2 mb-3">
+                  <div>
+                    <div className="font-bold text-white">{inf.name}</div>
+                    <div className="text-xs text-zinc-500">{inf.email}</div>
+                  </div>
+                  <Badge className={inf.banned ? 'bg-red-500/20 text-red-300' : 'bg-green-500/20 text-green-300'}>{inf.banned ? 'Desativado' : 'Ativo'}</Badge>
+                </div>
+                <div className="grid grid-cols-2 gap-2 text-xs mb-3">
+                  <div className="bg-zinc-800/60 rounded p-2"><div className="text-zinc-500">Código</div><div className="text-white font-mono">{inf.referralCode}</div></div>
+                  <div className="bg-zinc-800/60 rounded p-2"><div className="text-zinc-500">Comissão</div><div className="text-white">{inf.commissionPercent}%</div></div>
+                  <div className="bg-zinc-800/60 rounded p-2"><div className="text-zinc-500">Referidos</div><div className="text-white">{inf.referredCount}</div></div>
+                  <div className="bg-zinc-800/60 rounded p-2"><div className="text-zinc-500">Total Ganho</div><div className="text-white">{fmt(inf.totalEarnedCents)}</div></div>
+                </div>
+                <div className="flex justify-between items-center pt-2 border-t border-zinc-800 text-sm">
+                  <div className="text-green-300 font-bold">Saldo: {fmt(inf.balanceCents)}</div>
+                  <Button size="sm" variant="outline" disabled={busy} onClick={() => toggleBan(inf)} className={inf.banned ? 'border-green-500/40 text-green-300' : 'border-red-500/40 text-red-300'}>
+                    {inf.banned ? 'Reativar' : 'Desativar'}
+                  </Button>
+                </div>
+              </Card>
+            ))}
+            {!list.length && <Card className="bg-zinc-900 border-zinc-800 p-8 text-center text-zinc-500 lg:col-span-2">Sem influenciadores criados ainda.</Card>}
+          </div>
+        </>
+      )}
+      {ConfirmDialog}
     </div>
   )
 }
@@ -1454,6 +1715,7 @@ function AdminLayout({ admin, onLogout }) {
     ['players', 'Jogadores', Users],
     ['audit', 'Auditoria', ClipboardList],
     ['tournaments', 'Torneios', Crown],
+    ['influencers', 'Influenciadores', Sparkles],
     ['support', 'Suporte', MessageSquare],
   ]
   return (
@@ -1509,6 +1771,7 @@ function AdminLayout({ admin, onLogout }) {
         {section === 'players' && <PlayersSection />}
         {section === 'audit' && <AuditSection />}
         {section === 'tournaments' && <TournamentsSection />}
+        {section === 'influencers' && <InfluencersSection />}
         {section === 'support' && <SupportSection />}
       </main>
     </div>
