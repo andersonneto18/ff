@@ -87,9 +87,8 @@ async function payReferralCommission(db, room, commissionCents) {
   ])
   const participants = [creator, opponent].filter(p => p?.referredBy)
   if (!participants.length) return
-  // Anti-fraud: both participants referred by the same influencer → skip entirely.
-  // Prevents farming commission with two self-referred accounts playing each other.
-  if (participants.length === 2 && participants[0].referredBy === participants[1].referredBy) return
+  // Paid per referred participant, independently — if both sides of a room were referred
+  // by the same influencer, that influencer is paid twice (once for each of their players).
   for (const participant of participants) {
     const influencer = await db.collection('influencers').findOne({ id: participant.referredBy })
     if (!influencer || influencer.banned) continue
