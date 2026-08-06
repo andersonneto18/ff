@@ -594,7 +594,7 @@ function CreateRoomDialog({ open, onOpenChange, balanceCents, onNeedTopup, onSuc
             <div className="flex items-center justify-between">
               <Label>🧬 Habilidades de Personagens (opcional)</Label>
               <div className="flex items-center gap-2">
-                <span className="text-xs text-muted-foreground">Preset Confronto</span>
+                <span className="text-xs text-muted-foreground">Auto-preencher</span>
                 <Switch checked={form.characters === CONFRONTO_PRESET} onCheckedChange={(v) => setForm({ ...form, characters: v ? CONFRONTO_PRESET : '' })} />
               </div>
             </div>
