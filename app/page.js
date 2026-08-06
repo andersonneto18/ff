@@ -956,10 +956,14 @@ function RoomDetail({ roomId, me, onBack, refreshMe }) {
                 <div className="text-lg md:text-xl font-bold text-muted-foreground mb-3">Perdeste. Treina mais e vamos alcançar o sucesso! 💪</div>
               )}
               <Crown className="w-10 h-10 mx-auto text-yellow-400 mb-2" />
-              <div className="text-lg font-bold">Vencedor</div>
-              <div className="text-2xl gradient-text font-black">
-                {room.winnerId === creator?.id ? creator?.ffNickname : opponent?.ffNickname}
-              </div>
+              {room.winnerId !== me?.id && (
+                <>
+                  <div className="text-lg font-bold">Vencedor</div>
+                  <div className="text-2xl gradient-text font-black">
+                    {room.winnerId === creator?.id ? creator?.ffNickname : opponent?.ffNickname}
+                  </div>
+                </>
+              )}
               <div className="text-green-300 mt-2">Prémio: {fmt(room.prizeCents)}</div>
               {isParticipant && me?.id && room.winnerId && room.winnerId !== me.id && myClaim !== 'loss' && !['admin_approved', 'report_accepted'].includes(room.finalizeReason) && (
                 <div className="mt-4 pt-4 border-t border-red-500/30">
