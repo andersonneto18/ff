@@ -529,6 +529,7 @@ function RoomCard({ room, onOpen }) {
 }
 
 const CONFRONTO_PRESET = 'Ativos: Alok / Kamir\nPassivos: Kelly | Moco | Maxim | Leon | Hayato'
+const PETS_PRESET = 'Babuíno | Falcão | Mestre Tigre | Patinho | Dom Pisante'
 
 function CreateRoomDialog({ open, onOpenChange, balanceCents, onNeedTopup, onSuccess }) {
   const api = useApi()
@@ -600,7 +601,16 @@ function CreateRoomDialog({ open, onOpenChange, balanceCents, onNeedTopup, onSuc
             </div>
             <Textarea value={form.characters} onChange={e => setForm({ ...form, characters: e.target.value })} rows={2} placeholder="ex: Sem Chrono, K permitido, proibido Alok..." />
           </div>
-          <div><Label>🐾 Tipo de Pet (opcional)</Label><Textarea value={form.pets} onChange={e => setForm({ ...form, pets: e.target.value })} rows={2} placeholder="ex: Sem pets, Falco permitido, proibido Beaston..." /></div>
+          <div>
+            <div className="flex items-center justify-between">
+              <Label>🐾 Tipo de Pet (opcional)</Label>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-muted-foreground">Auto-preencher</span>
+                <Switch checked={form.pets === PETS_PRESET} onCheckedChange={(v) => setForm({ ...form, pets: v ? PETS_PRESET : '' })} />
+              </div>
+            </div>
+            <Textarea value={form.pets} onChange={e => setForm({ ...form, pets: e.target.value })} rows={2} placeholder="ex: Sem pets, Falco permitido, proibido Beaston..." />
+          </div>
           <div><Label>📝 Observações (opcional)</Label><Textarea value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} rows={2} /></div>
 
           <div className="glow-card rounded-lg p-4 text-sm space-y-1.5">
