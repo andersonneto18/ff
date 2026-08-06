@@ -1613,6 +1613,16 @@ async function handleRoute(request, { params }) {
         const rooms = await db.collection('rooms').find({}).sort({ createdAt: -1 }).limit(200).toArray()
         return J({ rooms: rooms.map(clean) })
       }
+
+      const adminRoomMsgMatch = route.match(/^\/admin\/rooms\/([^\/]+)\/messages$/)
+      if (adminRoomMsgMatch && method === 'GET') {
+        const roomId = adminRoomMsgMatch[1]
+        const msgs = await db.collection('room_messages').find({ roomId }).sort({ createdAt: 1 }).limit(500).toArray()
+        const ids = [...new Set(msgs.map(m => m.userId))]
+        const users = await db.collection('users').find({ id: { $in: ids } }).toArray()
+        const umap = Object.fromEntries(users.map(u => [u.id, { name: u.name, ffNickname: u.ffNickname, photoUrl: u.photoUrl }]))
+        return J({ messages: msgs.map(m => ({ ...clean(m), sender: umap[m.userId] || null })) })
+      }
     }
 
     return ERR(`Rota ${route} não encontrada`, 404)

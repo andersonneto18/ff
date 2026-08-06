@@ -411,6 +411,9 @@ function RoomsSection() {
   const [rooms, setRooms] = useState([])
   const [users, setUsers] = useState({})
   const [filter, setFilter] = useState('all')
+  const [detailRoom, setDetailRoom] = useState(null)
+  const [roomMessages, setRoomMessages] = useState([])
+  const [loadingMessages, setLoadingMessages] = useState(false)
   const load = useCallback(async () => {
     try {
       const [r, u] = await Promise.all([api('/admin/rooms'), api('/admin/users')])
@@ -419,6 +422,14 @@ function RoomsSection() {
     } catch (e) { toast.error(e.message) }
   }, [])
   useEffect(() => { load() }, [load])
+
+  const openDetails = async (room) => {
+    setDetailRoom(room)
+    setRoomMessages([])
+    setLoadingMessages(true)
+    try { const d = await api(`/admin/rooms/${room.id}/messages`); setRoomMessages(d.messages || []) }
+    catch (e) { toast.error(e.message) } finally { setLoadingMessages(false) }
+  }
   const filtered = filter === 'all' ? rooms.filter(r => r.status !== 'CANCELADA') : rooms.filter(r => r.status === filter)
   return (
     <div>
@@ -437,7 +448,7 @@ function RoomsSection() {
           const winner = r.winnerId ? users[r.winnerId] : null
           const loser = r.loserId ? users[r.loserId] : null
           return (
-            <Card key={r.id} className="bg-zinc-900 border-zinc-800 p-4">
+            <Card key={r.id} onClick={() => openDetails(r)} className="bg-zinc-900 border-zinc-800 p-4 cursor-pointer hover:border-purple-500/40 transition">
               <div className="flex items-center justify-between flex-wrap gap-3 mb-3">
                 <div className="flex items-center gap-3">
                   <div className="text-xs text-zinc-500 font-mono">#{r.id.slice(0,8).toUpperCase()}</div>
@@ -484,6 +495,47 @@ function RoomsSection() {
         })}
         {!filtered.length && <Card className="bg-zinc-900 border-zinc-800 p-8 text-center text-zinc-500">Sem salas para mostrar.</Card>}
       </div>
+
+      <Dialog open={!!detailRoom} onOpenChange={(open) => !open && setDetailRoom(null)}>
+        <DialogContent className="bg-zinc-900 border-zinc-800 text-white max-w-2xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Sala #{detailRoom?.id?.slice(0,8).toUpperCase()}</DialogTitle>
+          </DialogHeader>
+          {detailRoom && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-sm">
+                <div className="bg-zinc-800/60 rounded p-2"><div className="text-xs text-zinc-500">Modo</div><div className="text-white">{detailRoom.mode || '-'}</div></div>
+                <div className="bg-zinc-800/60 rounded p-2"><div className="text-xs text-zinc-500">Tipo</div><div className="text-white">{detailRoom.roomType || '-'}</div></div>
+                <div className="bg-zinc-800/60 rounded p-2"><div className="text-xs text-zinc-500">Plataforma</div><div className="text-white">{detailRoom.platform || '-'}</div></div>
+                <div className="bg-zinc-800/60 rounded p-2"><div className="text-xs text-zinc-500">Servidor</div><div className="text-white">{detailRoom.server || '-'}</div></div>
+                <div className="bg-zinc-800/60 rounded p-2 col-span-2 sm:col-span-1"><div className="text-xs text-zinc-500">Armas</div><div className="text-white">{detailRoom.weapons || '-'}</div></div>
+              </div>
+              {detailRoom.characters && <div className="text-sm text-zinc-300"><b className="text-purple-300">🧬 Habilidades:</b> {detailRoom.characters}</div>}
+              {detailRoom.pets && <div className="text-sm text-zinc-300"><b className="text-purple-300">🐾 Pets:</b> {detailRoom.pets}</div>}
+              {detailRoom.notes && <div className="text-sm text-zinc-300"><b className="text-purple-300">📝 Observações:</b> {detailRoom.notes}</div>}
+
+              <div>
+                <div className="text-xs font-bold text-zinc-400 uppercase tracking-wider mb-2 flex items-center gap-1"><MessageSquare className="w-3.5 h-3.5" /> Chat da Partida ({roomMessages.length})</div>
+                {loadingMessages ? (
+                  <div className="text-sm text-zinc-500">A carregar...</div>
+                ) : roomMessages.length ? (
+                  <div className="bg-zinc-800/60 rounded p-3 max-h-64 overflow-y-auto space-y-2">
+                    {roomMessages.map(m => (
+                      <div key={m.id} className="text-sm">
+                        <b className="text-zinc-100">{m.sender?.ffNickname || '?'}:</b>{' '}
+                        <span className="text-zinc-300">{m.message}</span>
+                        <span className="text-zinc-500 text-xs ml-2">{new Date(m.createdAt).toLocaleString('pt-PT', { dateStyle: 'short', timeStyle: 'short' })}</span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-sm text-zinc-500 italic">Sem mensagens nesta sala.</div>
+                )}
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
