@@ -915,6 +915,26 @@ async function handleRoute(request, { params }) {
       return J({ token, influencer: sanitizeInfluencer(influencer) })
     }
 
+    if (route === '/influencer/settings' && method === 'POST') {
+      const influencer = await getInfluencerFromRequest(request)
+      if (!influencer) return ERR('Não autenticado', 401)
+      const { name, currentPassword, newPassword } = await request.json()
+      const updates = {}
+      if (name && name.trim()) updates.name = name.trim()
+      if (newPassword) {
+        if (!currentPassword) return ERR('Indica a password atual para a alterar')
+        if (!verifyPassword(currentPassword, influencer.salt, influencer.passwordHash)) return ERR('Password atual incorreta', 401)
+        if (newPassword.length < 6) return ERR('A nova password deve ter pelo menos 6 caracteres')
+        const { salt, hash } = hashPassword(newPassword)
+        updates.salt = salt
+        updates.passwordHash = hash
+      }
+      if (!Object.keys(updates).length) return ERR('Nada para atualizar')
+      await db.collection('influencers').updateOne({ id: influencer.id }, { $set: updates })
+      const updated = await db.collection('influencers').findOne({ id: influencer.id })
+      return J({ influencer: sanitizeInfluencer(updated) })
+    }
+
     if (route === '/influencer/me' && method === 'GET') {
       const influencer = await getInfluencerFromRequest(request)
       if (!influencer) return ERR('Não autenticado', 401)
