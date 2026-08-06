@@ -644,11 +644,15 @@ function CreateRoomDialog({ open, onOpenChange, balanceCents, onNeedTopup, onSuc
 function Info({ label, v }) {
   return <div className="glow-card p-3 rounded-lg"><div className="text-xs text-purple-300 uppercase mb-0.5">{label}</div><div className="font-semibold">{v}</div></div>
 }
-function PlayerCard({ user, label }) {
+function PlayerCard({ user, label, isMe, isCreator }) {
   return (
-    <div className="glow-card rounded-xl p-4 text-center">
-      <div className="text-xs text-purple-300 uppercase tracking-wider mb-2">{label}</div>
-      <Avatar className="w-16 h-16 mx-auto ring-2 ring-purple-500/50 mb-2">
+    <div className={`glow-card rounded-xl p-4 text-center relative ${isCreator ? 'border-yellow-500/50 shadow-[0_0_20px_rgba(234,179,8,0.15)]' : ''}`}>
+      {isCreator && <Crown className="w-4 h-4 text-yellow-400 absolute top-2 right-2" />}
+      <div className="text-xs text-purple-300 uppercase tracking-wider mb-2 flex items-center justify-center gap-1.5">
+        {label}
+        {isMe && <span className="text-[10px] bg-green-500/20 text-green-300 border border-green-500/40 rounded-full px-1.5 py-0.5 normal-case tracking-normal">Eu</span>}
+      </div>
+      <Avatar className={`w-16 h-16 mx-auto ring-2 mb-2 ${isCreator ? 'ring-yellow-500/60' : 'ring-purple-500/50'}`}>
         <AvatarImage src={user?.photoUrl} />
         <AvatarFallback>{user?.ffNickname?.[0]}</AvatarFallback>
       </Avatar>
@@ -865,14 +869,14 @@ function RoomDetail({ roomId, me, onBack, refreshMe }) {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3 sm:gap-4 items-center mb-4 sm:mb-6">
-          <PlayerCard user={creator} label="Criador" />
+          <PlayerCard user={creator} label="Criador" isMe={me?.id === creator?.id} isCreator />
           <div className="text-center order-first md:order-none py-2 md:py-0">
             <div className="text-3xl sm:text-5xl font-black gradient-text">{fmt(room.betAmountCents)}</div>
             <div className="text-xs text-muted-foreground uppercase tracking-wider mt-1">Aposta cada</div>
             <Swords className="w-6 h-6 sm:w-8 sm:h-8 mx-auto mt-2 sm:mt-3 text-purple-400" />
             <div className="text-xs text-green-300 mt-1">Prémio: {fmt(Math.round(room.betAmountCents * 2 * 0.80))}</div>
           </div>
-          {opponent ? <PlayerCard user={opponent} label="Adversário" /> :
+          {opponent ? <PlayerCard user={opponent} label="Adversário" isMe={me?.id === opponent?.id} /> :
             <div className="glow-card rounded-xl p-4 text-center border-dashed border-purple-500/30">
               <div className="text-muted-foreground text-sm">A aguardar adversário...</div>
             </div>
