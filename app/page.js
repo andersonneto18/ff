@@ -974,7 +974,7 @@ function RoomDetail({ roomId, me, onBack, refreshMe }) {
               <div className="text-sm text-muted-foreground mt-1">Os dois jogadores enviaram resultados contraditórios. O prémio fica bloqueado até decisão do administrador.</div>
               {isParticipant && (
                 <Button onClick={() => setReportOpen(true)} className="mt-4 bg-orange-600 hover:bg-orange-700 font-bold">
-                  <Send className="w-4 h-4 mr-2" /> Enviar para Análise
+                  <Send className="w-4 h-4 mr-2" /> Enviar Provas
                 </Button>
               )}
             </div>
@@ -996,7 +996,7 @@ function RoomDetail({ roomId, me, onBack, refreshMe }) {
 
       <Dialog open={reportOpen} onOpenChange={setReportOpen}>
         <DialogContent className="bg-card border-purple-500/30 max-h-[90dvh] overflow-y-auto w-[calc(100vw-2rem)] sm:max-w-lg">
-          <DialogHeader><DialogTitle className="flex items-center gap-2"><AlertTriangle className="w-5 h-5 text-red-400" />{room.status === 'EM_CONFLITO' ? 'Enviar para Análise' : 'Denunciar Trapaça'}</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle className="flex items-center gap-2"><AlertTriangle className="w-5 h-5 text-red-400" />{room.status === 'EM_CONFLITO' ? 'Enviar Provas' : 'Denunciar Trapaça'}</DialogTitle></DialogHeader>
           <div className="space-y-3">
             <div className="text-xs text-muted-foreground bg-yellow-500/10 border border-yellow-500/30 p-3 rounded">
               ⚠️ Denúncias falsas podem resultar em banimento. Anexa provas claras.
