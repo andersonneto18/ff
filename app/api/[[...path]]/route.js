@@ -1643,6 +1643,36 @@ async function generateRoundMatches(db, tournamentId, playerIds, round, tourname
   }
 }
 
+// Tournament commission is a single lump sum (entryFee × players × COMMISSION), computed once at
+// start — split evenly across all entrants for referral purposes, since each contributed equally
+// to the pot regardless of how far they got. Mirrors payReferralCommission's per-room logic.
+async function payTournamentReferralCommission(db, tournamentId, tournamentName, commissionCents) {
+  if (!commissionCents) return
+  const participants = await db.collection('tournament_participants').find({ tournamentId }).toArray()
+  if (!participants.length) return
+  const perParticipantCommission = commissionCents / participants.length
+  const users = await db.collection('users').find({ id: { $in: participants.map(p => p.userId) } }).toArray()
+  const umap = Object.fromEntries(users.map(u => [u.id, u]))
+  for (const p of participants) {
+    const user = umap[p.userId]
+    if (!user?.referredBy) continue
+    const influencer = await db.collection('influencers').findOne({ id: user.referredBy })
+    if (!influencer || influencer.banned) continue
+    const cut = Math.round(perParticipantCommission * (influencer.commissionPercent || 0) / 100)
+    if (!cut) continue
+    const newBalance = (influencer.balanceCents || 0) + cut
+    await db.collection('influencers').updateOne({ id: influencer.id }, {
+      $set: { balanceCents: newBalance },
+      $inc: { totalEarnedCents: cut },
+    })
+    await db.collection('influencer_transactions').insertOne({
+      id: uuidv4(), influencerId: influencer.id, type: 'referral_commission', amountCents: cut,
+      referredUserId: user.id,
+      balance: newBalance, description: `Comissão referral torneio: ${tournamentName}`, createdAt: new Date(),
+    })
+  }
+}
+
 async function finalizeTournamentMatch(db, tournament, match, winnerId) {
   const loserId = match.player2Id === 'BYE' ? null : (winnerId === match.player1Id ? match.player2Id : match.player1Id)
   await db.collection('tournament_matches').updateOne({ id: match.id }, { $set: { status: 'FINALIZADA', winnerId, finishedAt: new Date() } })
@@ -1674,6 +1704,13 @@ async function finalizeTournamentMatch(db, tournament, match, winnerId) {
     }
     await db.collection('tournaments').updateOne({ id: tournament.id }, { $set: { status: 'FINALIZADO', winnerId: finalWinner, finishedAt: new Date() } })
     await createNotification(db, finalWinner, 'tournament', '🏆 Campeão!', `Parabéns! Ganhaste o torneio "${tFresh.name}" e recebeste ${(prize1/100).toFixed(2)}€!`)
+    if (tFresh.commissionCents) {
+      await db.collection('transactions').insertOne({
+        id: uuidv4(), userId: 'PLATFORM', type: 'commission', amountCents: tFresh.commissionCents,
+        description: `Comissão torneio: ${tFresh.name}`, createdAt: new Date(),
+      })
+      await payTournamentReferralCommission(db, tournament.id, tFresh.name, tFresh.commissionCents)
+    }
   } else {
     // Generate next round (with automatic bye if odd number of winners)
     const nextRound = match.round + 1
