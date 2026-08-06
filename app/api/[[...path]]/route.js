@@ -280,12 +280,12 @@ async function handleRoute(request, { params }) {
         const ids = [room.creatorId, room.opponentId].filter(Boolean)
         const users = await db.collection('users').find({ id: { $in: ids } }).toArray()
         const umap = Object.fromEntries(users.map(u => [u.id, { id: u.id, name: u.name, ffNickname: u.ffNickname, ffUid: u.ffUid, photoUrl: u.photoUrl, wins: u.wins, losses: u.losses, deviceType: u.deviceType || null }]))
-        let reporterId = null
-        if (room.status === 'EM_DISPUTA') {
-          const report = await db.collection('reports').findOne({ roomId: room.id, status: 'PENDENTE' })
-          reporterId = report?.reporterId || null
+        let reportedByIds = []
+        if (['EM_CONFLITO', 'EM_DISPUTA'].includes(room.status)) {
+          const pendingReports = await db.collection('reports').find({ roomId: room.id, status: 'PENDENTE' }).toArray()
+          reportedByIds = pendingReports.map(r => r.reporterId)
         }
-        return J({ room: clean(room), creator: umap[room.creatorId] || null, opponent: umap[room.opponentId] || null, reporterId })
+        return J({ room: clean(room), creator: umap[room.creatorId] || null, opponent: umap[room.opponentId] || null, reportedByIds })
       }
 
       const user = await getUserFromRequest(request)
@@ -410,6 +410,8 @@ async function handleRoute(request, { params }) {
           const finishedAgo = Date.now() - new Date(room.finishedAt || 0).getTime()
           if (finishedAgo > 24 * 60 * 60 * 1000) return ERR('Prazo de denúncia expirado (24h)')
         }
+        const already = await db.collection('reports').findOne({ roomId: room.id, reporterId: user.id, status: 'PENDENTE' })
+        if (already) return ERR('Já enviaste a tua denúncia para esta sala. Aguarda a decisão da equipa.')
         const sc = Array.isArray(screenshots) ? screenshots.filter(Boolean).slice(0, 6) : []
         await db.collection('reports').insertOne({
           id: uuidv4(), roomId: room.id, reporterId: user.id, reason: reason || '',

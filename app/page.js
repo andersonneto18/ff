@@ -783,7 +783,8 @@ function RoomDetail({ roomId, me, onBack, refreshMe }) {
   useEffect(() => { load(); const i = setInterval(load, 4000); return () => clearInterval(i) }, [load])
 
   if (!data) return <div className="p-8 text-center text-muted-foreground">A carregar...</div>
-  const { room, creator, opponent, reporterId } = data
+  const { room, creator, opponent, reportedByIds } = data
+  const iAlreadyReported = (reportedByIds || []).includes(me?.id)
   const isCreator = me?.id === room.creatorId
   const isOpponent = me?.id === room.opponentId
   const isParticipant = isCreator || isOpponent
@@ -973,9 +974,13 @@ function RoomDetail({ roomId, me, onBack, refreshMe }) {
               <div className="font-bold text-orange-300">Resultado em Conflito</div>
               <div className="text-sm text-muted-foreground mt-1">Os dois jogadores enviaram resultados contraditórios. O prémio fica bloqueado até decisão do administrador.</div>
               {isParticipant && (
-                <Button onClick={() => setReportOpen(true)} className="mt-4 bg-orange-600 hover:bg-orange-700 font-bold">
-                  <Send className="w-4 h-4 mr-2" /> Enviar Provas
-                </Button>
+                iAlreadyReported ? (
+                  <div className="mt-4 text-xs text-green-300">✓ As tuas provas já foram enviadas. Aguarda a decisão da equipa.</div>
+                ) : (
+                  <Button onClick={() => setReportOpen(true)} className="mt-4 bg-orange-600 hover:bg-orange-700 font-bold">
+                    <Send className="w-4 h-4 mr-2" /> Enviar Provas
+                  </Button>
+                )
               )}
             </div>
           )}
@@ -984,11 +989,16 @@ function RoomDetail({ roomId, me, onBack, refreshMe }) {
               <AlertTriangle className="w-8 h-8 mx-auto text-red-300 mb-2" />
               <div className="font-bold text-red-300">EM DISPUTA</div>
               <div className="text-sm text-muted-foreground">
-                {reporterId === me?.id
+                {iAlreadyReported
                   ? 'A tua denúncia foi recebida e está a ser analisada pela equipa.'
-                  : 'O outro jogador denunciou esta partida. A equipa está a analisar as provas enviadas.'}
+                  : 'O outro jogador denunciou esta partida. Podes enviar também a tua versão dos factos, se quiseres.'}
               </div>
               <div className="text-xs text-zinc-500">O resultado ficará suspenso até decisão da moderação.</div>
+              {isParticipant && !iAlreadyReported && (
+                <Button onClick={() => setReportOpen(true)} className="mt-2 bg-red-600 hover:bg-red-700 font-bold">
+                  <Send className="w-4 h-4 mr-2" /> Enviar as Minhas Provas
+                </Button>
+              )}
             </div>
           )}
         </div>
@@ -1000,7 +1010,7 @@ function RoomDetail({ roomId, me, onBack, refreshMe }) {
 
       <Dialog open={reportOpen} onOpenChange={setReportOpen}>
         <DialogContent className="bg-card border-purple-500/30 max-h-[90dvh] overflow-y-auto w-[calc(100vw-2rem)] sm:max-w-lg">
-          <DialogHeader><DialogTitle className="flex items-center gap-2"><AlertTriangle className="w-5 h-5 text-red-400" />{room.status === 'EM_CONFLITO' ? 'Enviar Provas' : 'Denunciar Trapaça'}</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle className="flex items-center gap-2"><AlertTriangle className="w-5 h-5 text-red-400" />{['EM_CONFLITO', 'EM_DISPUTA'].includes(room.status) ? 'Enviar Provas' : 'Denunciar Trapaça'}</DialogTitle></DialogHeader>
           <div className="space-y-3">
             <div className="text-xs text-muted-foreground bg-yellow-500/10 border border-yellow-500/30 p-3 rounded">
               ⚠️ Denúncias falsas podem resultar em banimento. Anexa provas claras.
