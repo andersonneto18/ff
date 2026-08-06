@@ -126,7 +126,7 @@ function DashboardView({ data }) {
         const pct = Math.round((inStep / step) * 100)
         return (
           <Card className="bg-zinc-900 border-zinc-800 p-5">
-            <div className="flex items-center justify-between mb-2">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 mb-2">
               <h3 className="font-bold text-white">🎯 Bónus por Marcos</h3>
               <span className="text-xs text-zinc-400">a cada {step} jogadores ativos → +{fmt(data.milestoneBonusCents)}</span>
             </div>
@@ -359,11 +359,11 @@ function InfluencerDashboard({ influencer, setInfluencer, onLogout }) {
           </Button>
         </div>
 
-        <div className="flex gap-1 flex-wrap border-b border-zinc-800 pb-1">
+        <div className="grid grid-cols-3 sm:flex sm:gap-1 gap-1 border-b border-zinc-800 pb-1">
           {nav.map(([k, l, I]) => (
             <button key={k} onClick={() => setView(k)}
-              className={`flex items-center gap-1.5 px-3 py-2 rounded-t-lg text-sm font-medium transition ${view === k ? 'bg-zinc-900 text-purple-300 border border-zinc-800 border-b-zinc-900' : 'text-zinc-500 hover:text-zinc-300'}`}>
-              <I className="w-4 h-4" />{l}
+              className={`flex items-center justify-center sm:justify-start gap-1.5 px-2 sm:px-3 py-2 rounded-t-lg text-xs sm:text-sm font-medium transition ${view === k ? 'bg-zinc-900 text-purple-300 border border-zinc-800 border-b-zinc-900' : 'text-zinc-500 hover:text-zinc-300'}`}>
+              <I className="w-4 h-4 shrink-0" /><span className="truncate">{l}</span>
             </button>
           ))}
         </div>
