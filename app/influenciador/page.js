@@ -118,6 +118,26 @@ function DashboardView({ data }) {
         <Stat label="Jogadores Referidos" value={data.referredCount} I={Users} color="from-blue-500 to-cyan-500" />
       </div>
 
+      {data.milestoneStep && (() => {
+        const step = data.milestoneStep
+        const active = data.activeReferredCount || 0
+        const inStep = active % step
+        const nextAt = Math.floor(active / step) * step + step
+        const pct = Math.round((inStep / step) * 100)
+        return (
+          <Card className="bg-zinc-900 border-zinc-800 p-5">
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="font-bold text-white">🎯 Bónus por Marcos</h3>
+              <span className="text-xs text-zinc-400">a cada {step} jogadores ativos → +{fmt(data.milestoneBonusCents)}</span>
+            </div>
+            <div className="text-sm text-zinc-300 mb-2">{active} jogadores ativos · faltam {nextAt - active} para o próximo bónus ({nextAt})</div>
+            <div className="w-full bg-zinc-800 rounded-full h-3 overflow-hidden">
+              <div className="h-full bg-gradient-to-r from-purple-600 to-blue-500 transition-all" style={{ width: `${pct}%` }} />
+            </div>
+          </Card>
+        )
+      })()}
+
       <Card className="bg-zinc-900 border-zinc-800 p-5">
         <h3 className="font-bold text-white mb-4">Histórico de Comissões</h3>
         <div className="space-y-2">

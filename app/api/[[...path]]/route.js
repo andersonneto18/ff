@@ -77,6 +77,37 @@ async function autoFinalizeTimeout(db, room) {
   return await finalizeRoom(db, room, winnerId, 'timeout_single_claim')
 }
 
+// Repeating milestone bonus: every N *active* referred players (players who have actually
+// generated at least one referral_commission, i.e. really wagered — not just registered,
+// which closes the free-signup farming angle) pays a one-off bonus. Repeats indefinitely:
+// 20 -> 5€, 40 -> +5€ (10€ total), 60 -> +5€ (15€ total), etc.
+const MILESTONE_STEP = 20
+const MILESTONE_BONUS_CENTS = 500
+
+async function checkInfluencerMilestones(db, influencerId) {
+  const txns = await db.collection('influencer_transactions').find({ influencerId, type: 'referral_commission' }).toArray()
+  const activeCount = new Set(txns.map(t => t.referredUserId).filter(Boolean)).size
+  const milestonesEarned = Math.floor(activeCount / MILESTONE_STEP)
+  for (let i = 1; i <= milestonesEarned; i++) {
+    const milestoneCount = i * MILESTONE_STEP
+    const already = await db.collection('influencer_milestones').findOne({ influencerId, milestoneCount })
+    if (already) continue
+    await db.collection('influencer_milestones').insertOne({
+      id: uuidv4(), influencerId, milestoneCount, bonusCents: MILESTONE_BONUS_CENTS, claimedAt: new Date(),
+    })
+    const influencer = await db.collection('influencers').findOne({ id: influencerId })
+    const newBalance = (influencer.balanceCents || 0) + MILESTONE_BONUS_CENTS
+    await db.collection('influencers').updateOne({ id: influencerId }, {
+      $set: { balanceCents: newBalance },
+      $inc: { totalEarnedCents: MILESTONE_BONUS_CENTS },
+    })
+    await db.collection('influencer_transactions').insertOne({
+      id: uuidv4(), influencerId, type: 'milestone_bonus', amountCents: MILESTONE_BONUS_CENTS,
+      balance: newBalance, description: `Bónus por trazer ${milestoneCount} jogadores ativos`, createdAt: new Date(),
+    })
+  }
+}
+
 // Pays each participant's referrer a cut of the platform commission for this room — lifetime
 // revenue share, triggered on every finalized bet by a referred player, forever.
 async function payReferralCommission(db, room, commissionCents) {
@@ -104,6 +135,7 @@ async function payReferralCommission(db, room, commissionCents) {
       roomId: room.id, referredUserId: participant.id,
       balance: newBalance, description: `Comissão referral sala ${room.id.slice(0,8)}`, createdAt: new Date(),
     })
+    await checkInfluencerMilestones(db, influencer.id)
   }
 }
 
@@ -947,6 +979,8 @@ async function handleRoute(request, { params }) {
       const referredCount = await db.collection('users').countDocuments({ referredBy: influencer.id })
       const txns = await db.collection('influencer_transactions').find({ influencerId: influencer.id }).sort({ createdAt: -1 }).limit(50).toArray()
       const withdrawals = await db.collection('influencer_withdrawals').find({ influencerId: influencer.id }).sort({ createdAt: -1 }).limit(20).toArray()
+      const commissionTxns = await db.collection('influencer_transactions').find({ influencerId: influencer.id, type: 'referral_commission' }).toArray()
+      const activeReferredCount = new Set(commissionTxns.map(t => t.referredUserId).filter(Boolean)).size
       return J({
         balanceCents: influencer.balanceCents || 0,
         pendingCents: influencer.pendingCents || 0,
@@ -954,6 +988,9 @@ async function handleRoute(request, { params }) {
         commissionPercent: influencer.commissionPercent,
         referralCode: influencer.referralCode,
         referredCount,
+        activeReferredCount,
+        milestoneStep: MILESTONE_STEP,
+        milestoneBonusCents: MILESTONE_BONUS_CENTS,
         transactions: txns.map(clean),
         withdrawals: withdrawals.map(clean),
       })
@@ -1690,6 +1727,7 @@ async function payTournamentReferralCommission(db, tournamentId, tournamentName,
       referredUserId: user.id,
       balance: newBalance, description: `Comissão referral torneio: ${tournamentName}`, createdAt: new Date(),
     })
+    await checkInfluencerMilestones(db, influencer.id)
   }
 }
 
