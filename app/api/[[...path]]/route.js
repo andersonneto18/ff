@@ -359,6 +359,7 @@ async function handleRoute(request, { params }) {
 
       if (action === 'messages' && method === 'GET') {
         if (room.creatorId !== user.id && room.opponentId !== user.id) return ERR('Não és participante', 403)
+        if (!room.opponentId) return ERR('O chat só fica disponível depois de teres um adversário', 403)
         const msgs = await db.collection('room_messages').find({ roomId }).sort({ createdAt: 1 }).limit(500).toArray()
         const ids = [...new Set(msgs.map(m => m.userId))]
         const users = await db.collection('users').find({ id: { $in: ids } }).toArray()
@@ -368,6 +369,7 @@ async function handleRoute(request, { params }) {
 
       if (action === 'messages' && method === 'POST') {
         if (room.creatorId !== user.id && room.opponentId !== user.id) return ERR('Não és participante', 403)
+        if (!room.opponentId) return ERR('O chat só fica disponível depois de teres um adversário', 403)
         if (['FINALIZADA', 'CANCELADA'].includes(room.status)) return ERR('O chat está encerrado para esta sala')
         const { message } = await request.json()
         const text = (message || '').trim()

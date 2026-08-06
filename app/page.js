@@ -986,7 +986,7 @@ function RoomDetail({ roomId, me, onBack, refreshMe }) {
         </div>
       </Card>
 
-      {isParticipant && (
+      {isParticipant && opponent && (
         <ChatPanel roomId={room.id} me={me} creator={creator} opponent={opponent} status={room.status} />
       )}
 
