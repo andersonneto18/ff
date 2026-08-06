@@ -659,6 +659,28 @@ function DisputesSection() {
           const cA = d.claims?.[d.creatorId]
           const cB = d.claims?.[d.opponentId]
           const potentialPrize = (d.betAmountCents || 0) * 2 * 0.9
+          const reportA = d.reports?.find(r => r.reporterId === d.creatorId)
+          const reportB = d.reports?.find(r => r.reporterId === d.opponentId)
+          const renderEvidence = (r) => (
+            <div className="mt-2 pt-2 border-t border-zinc-700/60">
+              <div className="text-xs text-orange-300 mb-1">📋 Denúncia enviada</div>
+              <div className="text-zinc-200 mb-2">{r.reason || '(sem descrição)'}</div>
+              {(r.videoUrl || (r.screenshots && r.screenshots.length > 0)) && (
+                <div className="flex gap-2 flex-wrap">
+                  {r.videoUrl && (
+                    <button onClick={() => setVideoModal(r.videoUrl)} className="inline-flex items-center gap-2 bg-zinc-800 hover:bg-zinc-700 rounded px-3 py-2 text-sm text-blue-300">
+                      <Video className="w-4 h-4" /> Ver vídeo
+                    </button>
+                  )}
+                  {(r.screenshots || []).map((s, i) => (
+                    <a key={i} href={s} target="_blank" rel="noreferrer" className="block">
+                      <img src={s} alt={`Print ${i+1}`} className="w-24 h-24 object-cover rounded border border-zinc-700 hover:border-purple-500" onError={(e) => { e.target.style.display='none' }} />
+                    </a>
+                  ))}
+                </div>
+              )}
+            </div>
+          )
           return (
             <Card key={d.id} className="bg-zinc-900 border border-orange-500/40 p-5">
               <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
@@ -666,7 +688,8 @@ function DisputesSection() {
                   <Scale className="w-5 h-5 text-orange-400" />
                   <div>
                     <div className="text-sm font-bold text-white">Sala #{d.id.slice(0,8).toUpperCase()} — {fmt(d.betAmountCents)} (prémio {fmt(potentialPrize)})</div>
-                    <div className="text-xs text-zinc-500">{new Date(d.createdAt).toLocaleString('pt-PT')}{d.previousStatus === 'EM_CONFLITO' && ' · Resultados em conflito'}</div>
+                    <div className="text-xs text-zinc-400 mt-0.5">{d.mode} · {d.platform} · {d.server || '-'} · {d.weapons || '-'}</div>
+                    <div className="text-xs text-zinc-500 mt-0.5">Criada {new Date(d.createdAt).toLocaleString('pt-PT')}{d.previousStatus === 'EM_CONFLITO' && ' · Resultados em conflito'}</div>
                   </div>
                 </div>
                 <Badge className="bg-orange-500/20 text-orange-300">{d.status}</Badge>
@@ -678,46 +701,24 @@ function DisputesSection() {
                     <Avatar className="w-8 h-8"><AvatarImage src={d.creator?.photoUrl} /><AvatarFallback>{d.creator?.ffNickname?.[0]}</AvatarFallback></Avatar>
                     <div>
                       <div className="font-bold text-white">{d.creator?.ffNickname} <span className="text-xs text-zinc-500">(Criador)</span></div>
-                      <div className="text-xs text-zinc-500">UID {d.creator?.ffUid}</div>
+                      <div className="text-xs text-zinc-500">UID {d.creator?.ffUid} · {d.creator?.email}</div>
                     </div>
                   </div>
                   <div className="text-xs text-zinc-400 mt-2">Resultado declarado: <b className={cA === 'win' ? 'text-green-400' : cA === 'loss' ? 'text-red-400' : 'text-zinc-500'}>{cA === 'win' ? 'Ganhei' : cA === 'loss' ? 'Perdi' : '—'}</b></div>
+                  {reportA ? renderEvidence(reportA) : <div className="text-xs text-zinc-500 italic mt-2 pt-2 border-t border-zinc-700/60">Sem denúncia enviada por este jogador.</div>}
                 </div>
                 <div className="bg-zinc-800/60 rounded p-3">
                   <div className="flex items-center gap-2">
                     <Avatar className="w-8 h-8"><AvatarImage src={d.opponent?.photoUrl} /><AvatarFallback>{d.opponent?.ffNickname?.[0]}</AvatarFallback></Avatar>
                     <div>
                       <div className="font-bold text-white">{d.opponent?.ffNickname} <span className="text-xs text-zinc-500">(Adversário)</span></div>
-                      <div className="text-xs text-zinc-500">UID {d.opponent?.ffUid}</div>
+                      <div className="text-xs text-zinc-500">UID {d.opponent?.ffUid} · {d.opponent?.email}</div>
                     </div>
                   </div>
                   <div className="text-xs text-zinc-400 mt-2">Resultado declarado: <b className={cB === 'win' ? 'text-green-400' : cB === 'loss' ? 'text-red-400' : 'text-zinc-500'}>{cB === 'win' ? 'Ganhei' : cB === 'loss' ? 'Perdi' : '—'}</b></div>
+                  {reportB ? renderEvidence(reportB) : <div className="text-xs text-zinc-500 italic mt-2 pt-2 border-t border-zinc-700/60">Sem denúncia enviada por este jogador.</div>}
                 </div>
               </div>
-
-              {d.reports?.map(r => (
-                <div key={r.id} className="bg-zinc-800/60 rounded p-3 mb-2 text-sm">
-                  <div className="text-xs text-zinc-400 mb-1">Análise enviada por {r.reporterId === d.creatorId ? d.creator?.ffNickname : d.opponent?.ffNickname}</div>
-                  <div className="text-zinc-200 mb-2">{r.reason || '(sem descrição)'}</div>
-                  {(r.videoUrl || (r.screenshots && r.screenshots.length > 0)) && (
-                    <div className="flex gap-2 flex-wrap">
-                      {r.videoUrl && (
-                        <button onClick={() => setVideoModal(r.videoUrl)} className="inline-flex items-center gap-2 bg-zinc-800 hover:bg-zinc-700 rounded px-3 py-2 text-sm text-blue-300">
-                          <Video className="w-4 h-4" /> Ver vídeo
-                        </button>
-                      )}
-                      {(r.screenshots || []).map((s, i) => (
-                        <a key={i} href={s} target="_blank" rel="noreferrer" className="block">
-                          <img src={s} alt={`Print ${i+1}`} className="w-24 h-24 object-cover rounded border border-zinc-700 hover:border-purple-500" onError={(e) => { e.target.style.display='none' }} />
-                        </a>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              ))}
-              {!d.reports?.length && (
-                <div className="bg-zinc-800/60 rounded p-3 mb-2 text-sm text-zinc-500 italic">Sem análise enviada ainda.</div>
-              )}
 
               <div className="bg-zinc-800/60 rounded p-3 mb-2 text-sm">
                 <div className="text-xs text-zinc-400 mb-2 flex items-center gap-1"><MessageSquare className="w-3 h-3" /> Chat da partida ({d.messages?.length || 0})</div>
