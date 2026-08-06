@@ -499,7 +499,10 @@ function ReportsSection() {
     catch (e) { toast.error(e.message) }
   }, [])
   useEffect(() => { load() }, [load])
-  const filtered = filter === 'all' ? reports : reports.filter(r => r.status === filter)
+  // Reports on a room still EM_DISPUTA are shown (with full context/evidence) in the Disputas
+  // section instead — showing them here too would just be the same pending case twice.
+  const notInActiveDispute = reports.filter(r => !r.roomId || r.room?.status !== 'EM_DISPUTA')
+  const filtered = filter === 'all' ? notInActiveDispute : notInActiveDispute.filter(r => r.status === filter)
 
   const act = async (reportId, action) => {
     if (!(await askConfirm(action === 'accept' ? 'Aceitar denúncia? O denunciante passará a vencedor.' : 'Rejeitar denúncia?'))) return
@@ -526,7 +529,7 @@ function ReportsSection() {
   return (
     <div>
       <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
-        <h1 className="text-3xl font-bold text-white">Denúncias ({reports.filter(r => r.status === 'PENDENTE').length} pendentes)</h1>
+        <h1 className="text-3xl font-bold text-white">Denúncias ({notInActiveDispute.filter(r => r.status === 'PENDENTE').length} pendentes)</h1>
         <div className="flex gap-2 flex-wrap">
           <div className="flex gap-1">
             {[['PENDENTE','Pendentes'],['ACEITE','Aceites'],['REJEITADA','Rejeitadas'],['all','Todas']].map(([k, l]) => (
