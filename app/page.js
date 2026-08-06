@@ -952,6 +952,9 @@ function RoomDetail({ roomId, me, onBack, refreshMe }) {
               {room.winnerId === me?.id && (
                 <div className="winner-text text-3xl md:text-4xl font-black mb-3">🏆 VENCESTE! 🏆</div>
               )}
+              {isParticipant && room.winnerId && room.winnerId !== me?.id && (
+                <div className="text-lg md:text-xl font-bold text-muted-foreground mb-3">Perdeste. Treina mais e vamos alcançar o sucesso! 💪</div>
+              )}
               <Crown className="w-10 h-10 mx-auto text-yellow-400 mb-2" />
               <div className="text-lg font-bold">Vencedor</div>
               <div className="text-2xl gradient-text font-black">
