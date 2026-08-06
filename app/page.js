@@ -783,7 +783,7 @@ function RoomDetail({ roomId, me, onBack, refreshMe }) {
   useEffect(() => { load(); const i = setInterval(load, 4000); return () => clearInterval(i) }, [load])
 
   if (!data) return <div className="p-8 text-center text-muted-foreground">A carregar...</div>
-  const { room, creator, opponent } = data
+  const { room, creator, opponent, reporterId } = data
   const isCreator = me?.id === room.creatorId
   const isOpponent = me?.id === room.opponentId
   const isParticipant = isCreator || isOpponent
@@ -983,7 +983,11 @@ function RoomDetail({ roomId, me, onBack, refreshMe }) {
             <div className="glow-card p-5 rounded-xl text-center border border-red-500/40 space-y-2">
               <AlertTriangle className="w-8 h-8 mx-auto text-red-300 mb-2" />
               <div className="font-bold text-red-300">EM DISPUTA</div>
-              <div className="text-sm text-muted-foreground">A tua denúncia foi recebida e está a ser analisada pela equipa.</div>
+              <div className="text-sm text-muted-foreground">
+                {reporterId === me?.id
+                  ? 'A tua denúncia foi recebida e está a ser analisada pela equipa.'
+                  : 'O outro jogador denunciou esta partida. A equipa está a analisar as provas enviadas.'}
+              </div>
               <div className="text-xs text-zinc-500">O resultado ficará suspenso até decisão da moderação.</div>
             </div>
           )}

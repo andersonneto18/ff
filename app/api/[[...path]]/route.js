@@ -280,7 +280,12 @@ async function handleRoute(request, { params }) {
         const ids = [room.creatorId, room.opponentId].filter(Boolean)
         const users = await db.collection('users').find({ id: { $in: ids } }).toArray()
         const umap = Object.fromEntries(users.map(u => [u.id, { id: u.id, name: u.name, ffNickname: u.ffNickname, ffUid: u.ffUid, photoUrl: u.photoUrl, wins: u.wins, losses: u.losses, deviceType: u.deviceType || null }]))
-        return J({ room: clean(room), creator: umap[room.creatorId] || null, opponent: umap[room.opponentId] || null })
+        let reporterId = null
+        if (room.status === 'EM_DISPUTA') {
+          const report = await db.collection('reports').findOne({ roomId: room.id, status: 'PENDENTE' })
+          reporterId = report?.reporterId || null
+        }
+        return J({ room: clean(room), creator: umap[room.creatorId] || null, opponent: umap[room.opponentId] || null, reporterId })
       }
 
       const user = await getUserFromRequest(request)
