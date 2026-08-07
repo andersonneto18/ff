@@ -1200,7 +1200,7 @@ function WalletView({ refreshMe, stripeEnabled, topupsEnabled }) {
 
   const request = async () => {
     const cents = Math.round(parseFloat(form.amountEuros || '0') * 100)
-    if (!cents || cents < 200) return toast.error('Valor mínimo de levantamento: 2€')
+    if (!cents) return toast.error('Valor inválido')
     if (cents > (data?.balanceCents || 0)) return toast.error('Saldo insuficiente')
     setBusy(true)
     try {
@@ -1453,8 +1453,8 @@ function WalletView({ refreshMe, stripeEnabled, topupsEnabled }) {
               </div>
             )}
             <div>
-              <Label>Valor (mínimo 2€, disponível: {fmt(data?.balanceCents)})</Label>
-              <Input type="number" min="2" step="0.01" value={form.amountEuros} onChange={e => setForm({ ...form, amountEuros: e.target.value })} />
+              <Label>Valor (disponível: {fmt(data?.balanceCents)})</Label>
+              <Input type="number" min="0.01" step="0.01" value={form.amountEuros} onChange={e => setForm({ ...form, amountEuros: e.target.value })} />
             </div>
           </div>
           <DialogFooter><Button onClick={request} disabled={busy} className="bg-gradient-to-r from-purple-600 to-blue-500">{busy ? 'A processar...' : 'Pedir Levantamento'}</Button></DialogFooter>

@@ -730,7 +730,7 @@ async function handleRoute(request, { params }) {
       if (user.banned) return ERR('Conta banida', 403)
       const { amountEuros } = await request.json()
       const cents = Math.round(parseFloat(amountEuros) * 100)
-      if (!cents || cents < 200) return ERR('Valor mínimo: 2€')
+      if (!cents || cents < 1) return ERR('Valor inválido')
       if (cents > (user.balanceCents || 0)) return ERR('Saldo insuficiente')
 
       const method = await db.collection('withdrawal_methods').findOne({ userId: user.id })
