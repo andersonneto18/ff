@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { v4 as uuidv4 } from 'uuid'
 import Stripe from 'stripe'
 import { connectDb } from '@/lib/db'
-import { hashPassword, verifyPassword, createSession, getUserFromRequest, sanitizeUser, createInfluencerSession, getInfluencerFromRequest, sanitizeInfluencer } from '@/lib/auth'
+import { hashPassword, verifyPassword, createSession, getUserFromRequest, sanitizeUser, createInfluencerSession, getInfluencerFromRequest, sanitizeInfluencer, createMaintenanceSession, isMaintenanceAuthed } from '@/lib/auth'
 import { sendPushToUser, hashEndpoint } from '@/lib/push'
 import { getUploadUrl, getViewUrl } from '@/lib/r2'
 
@@ -945,6 +945,109 @@ async function handleRoute(request, { params }) {
       if (influencer.banned) return ERR('Conta desativada', 403)
       const token = await createInfluencerSession(influencer.id)
       return J({ token, influencer: sanitizeInfluencer(influencer) })
+    }
+
+    // ----- Maintenance area: developer-only overview, gated by MAINTENANCE_PASSWORD env var -----
+    // Deliberately independent of the users/admin/influencer tables — survives an app sale or
+    // admin credential change, since it doesn't depend on any account that could be revoked.
+    if (route === '/maintenance/login' && method === 'POST') {
+      const { password } = await request.json()
+      if (!process.env.MAINTENANCE_PASSWORD) return ERR('Área de manutenção não configurada', 500)
+      if (password !== process.env.MAINTENANCE_PASSWORD) return ERR('Password incorreta', 401)
+      const token = await createMaintenanceSession()
+      return J({ token })
+    }
+
+    if (route === '/maintenance/me' && method === 'GET') {
+      if (!(await isMaintenanceAuthed(request))) return ERR('Não autenticado', 401)
+      return J({ ok: true })
+    }
+
+    if (route === '/maintenance/overview' && method === 'GET') {
+      if (!(await isMaintenanceAuthed(request))) return ERR('Não autenticado', 401)
+
+      const [totalPlayers, totalInfluencers, playerBalanceAgg, influencerBalanceAgg, revenueAgg, influencerPayoutAgg, topupAgg, withdrawalsPaidAgg, influencersRaw, topPlayers] = await Promise.all([
+        db.collection('users').countDocuments({ isAdmin: { $ne: true } }),
+        db.collection('influencers').countDocuments({}),
+        db.collection('users').aggregate([{ $match: {} }, { $group: { _id: null, total: { $sum: '$balanceCents' } } }]).toArray(),
+        db.collection('influencers').aggregate([{ $match: {} }, { $group: { _id: null, total: { $sum: '$balanceCents' } } }]).toArray(),
+        db.collection('transactions').aggregate([{ $match: { type: 'commission' } }, { $group: { _id: null, total: { $sum: '$amountCents' } } }]).toArray(),
+        db.collection('influencer_transactions').aggregate([{ $match: { type: { $in: ['referral_commission', 'milestone_bonus'] } } }, { $group: { _id: null, total: { $sum: '$amountCents' } } }]).toArray(),
+        db.collection('transactions').aggregate([{ $match: { type: 'topup' } }, { $group: { _id: null, total: { $sum: '$amountCents' } } }]).toArray(),
+        db.collection('withdrawals').aggregate([{ $match: { status: 'PAGO' } }, { $group: { _id: null, total: { $sum: '$amountCents' } } }]).toArray(),
+        db.collection('influencers').find({}).sort({ createdAt: -1 }).toArray(),
+        db.collection('users').find({ isAdmin: { $ne: true } }).sort({ balanceCents: -1 }).limit(100).toArray(),
+      ])
+
+      const referredCounts = await Promise.all(influencersRaw.map(inf => db.collection('users').countDocuments({ referredBy: inf.id })))
+      const influencersList = influencersRaw.map((inf, i) => ({
+        id: inf.id, name: inf.name, email: inf.email, commissionPercent: inf.commissionPercent,
+        balanceCents: inf.balanceCents || 0, pendingCents: inf.pendingCents || 0, totalEarnedCents: inf.totalEarnedCents || 0,
+        referredCount: referredCounts[i], banned: !!inf.banned, createdAt: inf.createdAt,
+      }))
+
+      // Group commission revenue + finalized rooms by day (last 30 days) for a quick trend view
+      const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
+      const [recentCommissions, recentRooms] = await Promise.all([
+        db.collection('transactions').find({ type: 'commission' }).sort({ createdAt: -1 }).limit(5000).toArray(),
+        db.collection('rooms').find({ status: 'FINALIZADA' }).sort({ finishedAt: -1 }).limit(5000).toArray(),
+      ])
+      const dayKey = (d) => new Date(d).toISOString().slice(0, 10)
+      const revenueByDay = {}
+      for (const t of recentCommissions) {
+        if (new Date(t.createdAt) < since) continue
+        const k = dayKey(t.createdAt)
+        revenueByDay[k] = (revenueByDay[k] || 0) + t.amountCents
+      }
+      const betsByDay = {}
+      for (const r of recentRooms) {
+        if (!r.finishedAt || new Date(r.finishedAt) < since) continue
+        const k = dayKey(r.finishedAt)
+        if (!betsByDay[k]) betsByDay[k] = { count: 0, volumeCents: 0 }
+        betsByDay[k].count += 1
+        betsByDay[k].volumeCents += (r.betAmountCents || 0) * 2
+      }
+      const dailyStats = []
+      for (let i = 29; i >= 0; i--) {
+        const d = new Date(Date.now() - i * 24 * 60 * 60 * 1000)
+        const k = dayKey(d)
+        dailyStats.push({ date: k, revenueCents: revenueByDay[k] || 0, bets: betsByDay[k]?.count || 0, volumeCents: betsByDay[k]?.volumeCents || 0 })
+      }
+      const todayKey = dayKey(new Date())
+      const revenueToday = revenueByDay[todayKey] || 0
+      const revenueLast7 = dailyStats.slice(-7).reduce((s, d) => s + d.revenueCents, 0)
+      const revenueLast30 = dailyStats.reduce((s, d) => s + d.revenueCents, 0)
+
+      return J({
+        totalPlayers,
+        totalPlayerBalanceCents: playerBalanceAgg[0]?.total || 0,
+        totalInfluencers,
+        totalInfluencerBalanceCents: influencerBalanceAgg[0]?.total || 0,
+        totalRevenueCents: revenueAgg[0]?.total || 0,
+        totalInfluencerPayoutCents: influencerPayoutAgg[0]?.total || 0,
+        totalTopupsCents: topupAgg[0]?.total || 0,
+        withdrawalsPaidCents: withdrawalsPaidAgg[0]?.total || 0,
+        revenueToday, revenueLast7, revenueLast30,
+        dailyStats,
+        influencers: influencersList,
+        topPlayers: topPlayers.map(u => ({ id: u.id, name: u.name, email: u.email, balanceCents: u.balanceCents || 0, wins: u.wins || 0, losses: u.losses || 0, totalEarningsCents: u.totalEarningsCents || 0, banned: !!u.banned, createdAt: u.createdAt })),
+      })
+    }
+
+    if (route === '/maintenance/players' && method === 'GET') {
+      if (!(await isMaintenanceAuthed(request))) return ERR('Não autenticado', 401)
+      const url = new URL(request.url)
+      const q = (url.searchParams.get('q') || '').toLowerCase().trim()
+      const all = await db.collection('users').find({ isAdmin: { $ne: true } }).sort({ balanceCents: -1 }).toArray()
+      const filtered = q
+        ? all.filter(u => (u.name || '').toLowerCase().includes(q) || (u.email || '').toLowerCase().includes(q) || (u.ffUid || '').toLowerCase().includes(q))
+        : all
+      const page = filtered.slice(0, 200).map(u => ({
+        id: u.id, name: u.name, email: u.email, ffUid: u.ffUid, balanceCents: u.balanceCents || 0,
+        wins: u.wins || 0, losses: u.losses || 0, totalEarningsCents: u.totalEarningsCents || 0,
+        banned: !!u.banned, createdAt: u.createdAt,
+      }))
+      return J({ players: page, total: filtered.length })
     }
 
     if (route === '/influencer/settings' && method === 'POST') {
