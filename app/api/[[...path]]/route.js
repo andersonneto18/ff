@@ -874,6 +874,11 @@ async function handleRoute(request, { params }) {
         if (tournament.status !== 'ABERTO') return ERR('Só podes sair antes do torneio começar')
         const participant = await db.collection('tournament_participants').findOne({ tournamentId: tId, userId: user.id })
         if (!participant) return ERR('Não estás inscrito neste torneio')
+        // Leaving deletes the whole entry, partner link included — warn the partner so the duo
+        // doesn't just silently vanish from under them.
+        if (participant.partnerId && participant.partnerStatus) {
+          await createNotification(db, participant.partnerId, 'tournament_partner_invite', 'Dupla desfeita', `${user.name} saiu do torneio "${tournament.name}" — a vossa dupla foi cancelada.`, tId)
+        }
         await db.collection('tournament_participants').deleteMany({ id: participant.id })
         await db.collection('tournaments').updateOne({ id: tId }, { $inc: { currentPlayers: -1 } })
         const fee = tournament.entryFeeCents || 0
