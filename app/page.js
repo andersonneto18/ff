@@ -1952,6 +1952,9 @@ function TournamentsView({ me }) {
                                 <Button onClick={() => beginMatch(t.id, active.id)} disabled={busy} className="w-full h-11 bg-gradient-to-r from-green-600 to-emerald-500 font-black">
                                   ✅ Já criei a sala — Iniciar Partida
                                 </Button>
+                                <div className="text-[11px] text-center text-red-300 bg-red-500/10 border border-red-500/30 rounded-lg px-2 py-1.5">
+                                  ⚠️ Atenção: só deves clicar em "Iniciar Partida" depois de combinares com o teu adversário quando vão jogar e a sala já estiver criada no Free Fire.
+                                </div>
                               </div>
                             ) : (
                               <div className="text-xs text-center rounded-lg px-3 py-2 bg-blue-500/10 border border-blue-500/20 text-blue-300">
