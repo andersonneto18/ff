@@ -1418,6 +1418,8 @@ function TournamentsSection() {
                             {u?.photoUrl && <img src={u.photoUrl} className="w-5 h-5 rounded-full" />}
                             <span className="text-xs text-white font-medium">{u?.ffNickname || u?.name || p.userId.slice(0,8)}</span>
                             <span className="text-[10px] text-zinc-500">{u?.wins ?? 0}V/{u?.losses ?? 0}D</span>
+                            {p.partnerStatus === 'ACEITE' && <span className="text-[10px] text-purple-300 font-medium">+ {p.partner?.ffNickname || p.partner?.name}</span>}
+                            {p.partnerStatus === 'PENDENTE' && <span className="text-[10px] text-yellow-400">(convite pendente)</span>}
                           </div>
                         )
                       })}
@@ -1431,9 +1433,9 @@ function TournamentsSection() {
                       const p1 = details.umap?.[m.player1Id]; const p2 = details.umap?.[m.player2Id]
                       return (
                         <div key={m.id} className={`flex items-center gap-2 text-xs p-2 rounded-lg mb-1 ${m.status === 'EM_CONFLITO' ? 'bg-orange-500/15 border border-orange-500/30' : 'bg-zinc-800/60'}`}>
-                          <span className={m.winnerId === m.player1Id ? 'text-green-300 font-bold' : 'text-zinc-300'}>{p1?.ffNickname || '?'}</span>
+                          <span className={m.winnerId === m.player1Id ? 'text-green-300 font-bold' : 'text-zinc-300'}>{p1?.ffNickname || '?'}{details.partnerMap?.[m.player1Id] && ` + ${details.partnerMap[m.player1Id].ffNickname}`}</span>
                           <span className="text-zinc-600">vs</span>
-                          <span className={m.winnerId === m.player2Id ? 'text-green-300 font-bold' : 'text-zinc-300'}>{p2?.ffNickname || '?'}</span>
+                          <span className={m.winnerId === m.player2Id ? 'text-green-300 font-bold' : 'text-zinc-300'}>{p2?.ffNickname || '?'}{details.partnerMap?.[m.player2Id] && ` + ${details.partnerMap[m.player2Id].ffNickname}`}</span>
                           <span className="ml-auto">
                             {m.status === 'FINALIZADA' && <span className="text-green-400">✓</span>}
                             {m.status === 'PENDENTE' && <span className="text-zinc-500">Pendente</span>}
