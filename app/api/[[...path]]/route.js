@@ -764,22 +764,27 @@ async function handleRoute(request, { params }) {
     if (route === '/tournaments' && method === 'GET') {
       const user = await getUserFromRequest(request)
       const list = await db.collection('tournaments').find({ status: { $in: ['ABERTO', 'EM_ANDAMENTO'] } }).sort({ createdAt: -1 }).limit(20).toArray()
+      const tIds = list.map(t => t.id)
+      // currentPlayers/maxPlayers count entries (duos), not heads — totalPlayers is the real headcount
+      // (entry + accepted partner) so "Duplas 4/8" can also show "8 jogadores no total" alongside it.
+      const allParticipants = tIds.length ? await db.collection('tournament_participants').find({ tournamentId: { $in: tIds } }).toArray() : []
+      const headcountMap = {}
+      for (const p of allParticipants) headcountMap[p.tournamentId] = (headcountMap[p.tournamentId] || 0) + 1 + (p.partnerStatus === 'ACEITE' ? 1 : 0)
       if (user) {
-        const tIds = list.map(t => t.id)
         const [joined, partnerOf] = tIds.length ? await Promise.all([
           db.collection('tournament_participants').find({ tournamentId: { $in: tIds }, userId: user.id }).toArray(),
           db.collection('tournament_participants').find({ tournamentId: { $in: tIds }, partnerId: user.id, partnerStatus: 'ACEITE' }).toArray(),
         ]) : [[], []]
         const joinedSet = new Set(joined.map(j => j.tournamentId))
         const partnerMap = Object.fromEntries(partnerOf.map(p => [p.tournamentId, p.userId]))
+        let inviterMap = {}
         if (partnerOf.length) {
           const inviters = await db.collection('users').find({ id: { $in: partnerOf.map(p => p.userId) } }).toArray()
-          const inviterMap = Object.fromEntries(inviters.map(u => [u.id, { id: u.id, name: u.name, ffNickname: u.ffNickname }]))
-          return J({ tournaments: list.map(t => ({ ...clean(t), isJoined: joinedSet.has(t.id), partnerOfInviter: partnerMap[t.id] ? inviterMap[partnerMap[t.id]] : null })) })
+          inviterMap = Object.fromEntries(inviters.map(u => [u.id, { id: u.id, name: u.name, ffNickname: u.ffNickname }]))
         }
-        return J({ tournaments: list.map(t => ({ ...clean(t), isJoined: joinedSet.has(t.id), partnerOfInviter: null })) })
+        return J({ tournaments: list.map(t => ({ ...clean(t), totalPlayers: headcountMap[t.id] || 0, isJoined: joinedSet.has(t.id), partnerOfInviter: partnerMap[t.id] ? (inviterMap[partnerMap[t.id]] || null) : null })) })
       }
-      return J({ tournaments: list.map(clean) })
+      return J({ tournaments: list.map(t => ({ ...clean(t), totalPlayers: headcountMap[t.id] || 0 })) })
     }
 
     // Pending duo-partner invites for the current user, across all tournaments — shown as an
@@ -840,8 +845,9 @@ async function handleRoute(request, { params }) {
         }
         matches = await db.collection('tournament_matches').find({ tournamentId: tId }).sort({ round: 1 }).toArray()
         const tFinal = await db.collection('tournaments').findOne({ id: tId })
+        const totalPlayers = participants.reduce((s, p) => s + 1 + (p.partnerStatus === 'ACEITE' ? 1 : 0), 0)
         return J({
-          tournament: clean(tFinal),
+          tournament: { ...clean(tFinal), totalPlayers },
           participants: participants.map(p => ({ ...clean(p), user: umap[p.userId], partner: p.partnerId ? umap[p.partnerId] : null })),
           matches: matches.map(clean),
           umap,

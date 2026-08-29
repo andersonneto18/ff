@@ -1774,10 +1774,11 @@ function TournamentsView({ me }) {
               </div>
 
               <div className="grid grid-cols-3 gap-2 mb-3 text-center">
-                <div className="glow-card rounded-lg p-2"><div className="text-xs text-muted-foreground">Jogadores</div><div className="font-bold">{t.currentPlayers}/{t.maxPlayers}</div></div>
+                <div className="glow-card rounded-lg p-2"><div className="text-xs text-muted-foreground">Duplas</div><div className="font-bold">{t.currentPlayers}/{t.maxPlayers}</div></div>
                 <div className="glow-card rounded-lg p-2"><div className="text-xs text-muted-foreground">1º Lugar</div><div className="font-bold text-yellow-300">{prize1}€</div></div>
                 <div className="glow-card rounded-lg p-2"><div className="text-xs text-muted-foreground">2º Lugar</div><div className="font-bold text-zinc-300">{prize2}€</div></div>
               </div>
+              {t.totalPlayers > 0 && <div className="text-xs text-muted-foreground text-center -mt-2 mb-3">👥 {t.totalPlayers} jogadores no total</div>}
 
               {(t.mode || t.server || t.weapons || t.platform || t.characters || t.pets || t.rules) && (
                 <div className="bg-zinc-800/50 border border-zinc-700/60 rounded-lg p-3 mb-3">
@@ -2200,10 +2201,11 @@ function TournamentInviteModal({ invite, onClose, onDone }) {
               {t.description && <p className="text-sm text-muted-foreground">{t.description}</p>}
             </div>
             <div className="grid grid-cols-3 gap-2 text-center">
-              <div className="glow-card rounded-lg p-2"><div className="text-xs text-muted-foreground">Jogadores</div><div className="font-bold">{t.currentPlayers}/{t.maxPlayers}</div></div>
+              <div className="glow-card rounded-lg p-2"><div className="text-xs text-muted-foreground">Duplas</div><div className="font-bold">{t.currentPlayers}/{t.maxPlayers}</div></div>
               <div className="glow-card rounded-lg p-2"><div className="text-xs text-muted-foreground">1º Lugar</div><div className="font-bold text-yellow-300">{prize1}€</div></div>
               <div className="glow-card rounded-lg p-2"><div className="text-xs text-muted-foreground">2º Lugar</div><div className="font-bold text-zinc-300">{prize2}€</div></div>
             </div>
+            {t.totalPlayers > 0 && <div className="text-xs text-muted-foreground text-center">👥 {t.totalPlayers} jogadores no total</div>}
             {(t.mode || t.server || t.weapons || t.platform || t.characters || t.pets || t.rules) && (
               <div className="bg-zinc-800/50 border border-zinc-700/60 rounded-lg p-3">
                 <div className="text-xs font-bold text-purple-300 uppercase tracking-wider mb-2">📋 Regras da Partida</div>
@@ -2380,7 +2382,7 @@ function Dashboard({ me, onLogout, refreshMe }) {
                         </div>
                       </div>
                       <div className="grid grid-cols-3 gap-2 text-center text-xs mt-2">
-                        <div className="glow-card rounded p-1.5"><div className="text-muted-foreground">Jogadores</div><div className="font-bold">{t.currentPlayers}/{t.maxPlayers}</div></div>
+                        <div className="glow-card rounded p-1.5"><div className="text-muted-foreground">Duplas</div><div className="font-bold">{t.currentPlayers}/{t.maxPlayers}</div></div>
                         <div className="glow-card rounded p-1.5"><div className="text-muted-foreground">1º Lugar</div><div className="font-bold text-yellow-300">{prize1}€</div></div>
                         <div className="glow-card rounded p-1.5"><div className="text-muted-foreground">Servidor</div><div className="font-bold">{t.server || '-'}</div></div>
                       </div>
