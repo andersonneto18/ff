@@ -773,6 +773,30 @@ async function handleRoute(request, { params }) {
       return J({ tournaments: list.map(clean) })
     }
 
+    // Pending duo-partner invites for the current user, across all tournaments — shown as an
+    // actionable list (accept/decline) rather than a plain notification text.
+    if (route === '/tournaments/invites' && method === 'GET') {
+      const user = await getUserFromRequest(request)
+      if (!user) return ERR('Não autenticado', 401)
+      const pending = await db.collection('tournament_participants').find({ partnerId: user.id, partnerStatus: 'PENDENTE' }).toArray()
+      if (!pending.length) return J({ invites: [] })
+      const tIds = [...new Set(pending.map(p => p.tournamentId))]
+      const inviterIds = [...new Set(pending.map(p => p.userId))]
+      const [tournaments, inviters] = await Promise.all([
+        db.collection('tournaments').find({ id: { $in: tIds } }).toArray(),
+        db.collection('users').find({ id: { $in: inviterIds } }).toArray(),
+      ])
+      const tmap = Object.fromEntries(tournaments.map(t => [t.id, t]))
+      const umap = Object.fromEntries(inviters.map(u => [u.id, u]))
+      return J({
+        invites: pending.map(p => ({
+          tournamentId: p.tournamentId,
+          tournamentName: tmap[p.tournamentId]?.name || '?',
+          inviter: umap[p.userId] ? { id: umap[p.userId].id, name: umap[p.userId].name, ffNickname: umap[p.userId].ffNickname, photoUrl: umap[p.userId].photoUrl } : null,
+        })),
+      })
+    }
+
     const tourMatch = route.match(/^\/tournaments\/([^\/]+)(?:\/(.*))?$/)
     if (tourMatch && !route.startsWith('/admin/')) {
       const tId = tourMatch[1]; const tAction = tourMatch[2]
@@ -781,9 +805,16 @@ async function handleRoute(request, { params }) {
 
       if (!tAction && method === 'GET') {
         const participants = await db.collection('tournament_participants').find({ tournamentId: tId }).toArray()
-        const userIds = participants.map(p => p.userId)
+        const partnerIds = participants.map(p => p.partnerId).filter(Boolean)
+        const userIds = [...new Set([...participants.map(p => p.userId), ...partnerIds])]
         const users = await db.collection('users').find({ id: { $in: userIds } }).toArray()
         const umap = Object.fromEntries(users.map(u => [u.id, { id: u.id, name: u.name, ffNickname: u.ffNickname, photoUrl: u.photoUrl, wins: u.wins, losses: u.losses }]))
+        // Duo display name per registered player (only once the partner has accepted) — lets the
+        // bracket show "Fulano + Amigo" instead of just the account that paid the entry.
+        const partnerMap = Object.fromEntries(
+          participants.filter(p => p.partnerStatus === 'ACEITE' && p.partnerId && umap[p.partnerId])
+            .map(p => [p.userId, umap[p.partnerId]])
+        )
         let matches = await db.collection('tournament_matches').find({ tournamentId: tId }).sort({ round: 1 }).toArray()
         // Auto-timeout: if one player claimed and opponent didn't respond in 2h, auto-advance claimer
         const TIMEOUT_MS = 2 * 60 * 60 * 1000
@@ -800,7 +831,13 @@ async function handleRoute(request, { params }) {
         }
         matches = await db.collection('tournament_matches').find({ tournamentId: tId }).sort({ round: 1 }).toArray()
         const tFinal = await db.collection('tournaments').findOne({ id: tId })
-        return J({ tournament: clean(tFinal), participants: participants.map(p => ({ ...clean(p), user: umap[p.userId] })), matches: matches.map(clean), umap })
+        return J({
+          tournament: clean(tFinal),
+          participants: participants.map(p => ({ ...clean(p), user: umap[p.userId], partner: p.partnerId ? umap[p.partnerId] : null })),
+          matches: matches.map(clean),
+          umap,
+          partnerMap,
+        })
       }
 
       if (tAction === 'join' && method === 'POST') {
@@ -836,6 +873,45 @@ async function handleRoute(request, { params }) {
           await db.collection('users').updateOne({ id: user.id }, { $set: { balanceCents: newBalance } })
           await db.collection('transactions').insertOne({ id: uuidv4(), userId: user.id, type: 'tournament_refund', amountCents: fee, balance: newBalance, description: `Saída do torneio: ${tournament.name}`, createdAt: new Date() })
           await createNotification(db, user.id, 'tournament', 'Saíste do torneio', `A tua inscrição no torneio "${tournament.name}" foi cancelada. Os ${(fee/100).toFixed(2)}€ foram devolvidos ao teu saldo.`)
+        }
+        return J({ ok: true })
+      }
+
+      if (tAction === 'invite-partner' && method === 'POST') {
+        const user = await getUserFromRequest(request)
+        if (!user) return ERR('Não autenticado', 401)
+        const me = await db.collection('tournament_participants').findOne({ tournamentId: tId, userId: user.id })
+        if (!me) return ERR('Não estás inscrito neste torneio')
+        if (tournament.status !== 'ABERTO') return ERR('Só podes gerir o parceiro antes do torneio começar')
+        const { partnerEmail } = await request.json()
+        const email = (partnerEmail || '').trim()
+        if (!email) {
+          // Empty email = cancel any invite in progress
+          await db.collection('tournament_participants').updateOne({ id: me.id }, { $set: { partnerId: null, partnerStatus: null } })
+          return J({ ok: true, cancelled: true })
+        }
+        if (email.toLowerCase() === user.email.toLowerCase()) return ERR('Não podes convidar-te a ti mesmo')
+        const partner = await db.collection('users').findOne({ email })
+        if (!partner) return ERR('Não existe nenhuma conta com esse email')
+        const already = await db.collection('tournament_participants').findOne({ tournamentId: tId, userId: partner.id })
+        if (already) return ERR('Essa conta já está inscrita neste torneio com a sua própria entrada')
+        await db.collection('tournament_participants').updateOne({ id: me.id }, { $set: { partnerId: partner.id, partnerStatus: 'PENDENTE' } })
+        await createNotification(db, partner.id, 'tournament_partner_invite', '🎮 Convite de dupla', `${user.name} convidou-te para jogares como dupla no torneio "${tournament.name}"`, tId)
+        return J({ ok: true })
+      }
+
+      if (tAction === 'partner-response' && method === 'POST') {
+        const user = await getUserFromRequest(request)
+        if (!user) return ERR('Não autenticado', 401)
+        const { accept } = await request.json()
+        const invite = await db.collection('tournament_participants').findOne({ tournamentId: tId, partnerId: user.id, partnerStatus: 'PENDENTE' })
+        if (!invite) return ERR('Convite não encontrado ou já respondido')
+        if (accept) {
+          await db.collection('tournament_participants').updateOne({ id: invite.id }, { $set: { partnerStatus: 'ACEITE' } })
+          await createNotification(db, invite.userId, 'tournament_partner_invite', '✅ Convite aceite', `${user.name} aceitou jogar como tua dupla no torneio "${tournament.name}"`, tId)
+        } else {
+          await db.collection('tournament_participants').updateOne({ id: invite.id }, { $set: { partnerId: null, partnerStatus: null } })
+          await createNotification(db, invite.userId, 'tournament_partner_invite', 'Convite recusado', `${user.name} recusou o convite de dupla no torneio "${tournament.name}"`, tId)
         }
         return J({ ok: true })
       }

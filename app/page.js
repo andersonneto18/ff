@@ -1607,6 +1607,8 @@ function TournamentsView({ me }) {
   const [reportMatchId, setReportMatchId] = useState(null)
   const [reportForm, setReportForm] = useState({ reason: '', files: [] })
   const [rulesModal, setRulesModal] = useState(null)
+  const [invites, setInvites] = useState([])
+  const [partnerEmailDrafts, setPartnerEmailDrafts] = useState({})
 
   const load = useCallback(async () => {
     try { const d = await api('/tournaments'); setList(d.tournaments || []) } catch (e) {}
@@ -1616,8 +1618,42 @@ function TournamentsView({ me }) {
     try { const d = await api(`/tournaments/${id}`); setDetails(d) } catch (e) {}
   }, [api])
 
-  useEffect(() => { load(); const i = setInterval(load, 5000); return () => clearInterval(i) }, [load])
+  const loadInvites = useCallback(async () => {
+    try { const d = await api('/tournaments/invites'); setInvites(d.invites || []) } catch (e) {}
+  }, [api])
+
+  useEffect(() => { load(); loadInvites(); const i = setInterval(() => { load(); loadInvites() }, 5000); return () => clearInterval(i) }, [load, loadInvites])
   useEffect(() => { if (selected) loadDetails(selected) }, [selected, loadDetails])
+
+  const respondInvite = async (tournamentId, accept) => {
+    setBusy(true)
+    try {
+      await api(`/tournaments/${tournamentId}/partner-response`, { method: 'POST', body: JSON.stringify({ accept }) })
+      toast.success(accept ? 'Convite aceite!' : 'Convite recusado')
+      loadInvites(); if (selected === tournamentId) loadDetails(tournamentId)
+    } catch (e) { toast.error(e.message) } finally { setBusy(false) }
+  }
+
+  const invitePartner = async (t) => {
+    const email = (partnerEmailDrafts[t.id] || '').trim()
+    if (!email) { toast.error('Escreve o email do teu amigo'); return }
+    setBusy(true)
+    try {
+      await api(`/tournaments/${t.id}/invite-partner`, { method: 'POST', body: JSON.stringify({ partnerEmail: email }) })
+      toast.success('Convite enviado! Aguarda que o teu amigo aceite.')
+      setPartnerEmailDrafts(d => ({ ...d, [t.id]: '' }))
+      loadDetails(t.id)
+    } catch (e) { toast.error(e.message) } finally { setBusy(false) }
+  }
+
+  const cancelPartnerInvite = async (t) => {
+    setBusy(true)
+    try {
+      await api(`/tournaments/${t.id}/invite-partner`, { method: 'POST', body: JSON.stringify({ partnerEmail: '' }) })
+      toast.success('Convite cancelado')
+      loadDetails(t.id)
+    } catch (e) { toast.error(e.message) } finally { setBusy(false) }
+  }
 
   const join = async (t) => {
     setBusy(true)
@@ -1655,6 +1691,25 @@ function TournamentsView({ me }) {
   return (
     <div className="space-y-6">
       <div><h1 className="text-3xl font-black gradient-text">Torneios</h1><p className="text-sm text-muted-foreground">Inscreve-te, elimina os adversários e leva o prémio</p></div>
+
+      {invites.length > 0 && (
+        <div className="space-y-2">
+          {invites.map(inv => (
+            <Card key={inv.tournamentId} className="glow-card border-yellow-500/40 p-4 flex items-center justify-between gap-3 flex-wrap">
+              <div className="flex items-center gap-2">
+                <Avatar className="w-9 h-9"><AvatarImage src={inv.inviter?.photoUrl} /><AvatarFallback>{inv.inviter?.ffNickname?.[0]}</AvatarFallback></Avatar>
+                <div className="text-sm">
+                  <b>{inv.inviter?.name}</b> convidou-te para jogares como dupla em <b>{inv.tournamentName}</b>
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <Button size="sm" disabled={busy} onClick={() => respondInvite(inv.tournamentId, true)} className="bg-green-600 hover:bg-green-700">Aceitar</Button>
+                <Button size="sm" variant="outline" disabled={busy} onClick={() => respondInvite(inv.tournamentId, false)} className="border-red-500/40 text-red-400">Recusar</Button>
+              </div>
+            </Card>
+          ))}
+        </div>
+      )}
 
       {/* Rules modal */}
       {rulesModal && (
@@ -1753,6 +1808,51 @@ function TournamentsView({ me }) {
               {selected === t.id && details && (
                 <div className="mt-4 pt-4 border-t border-purple-500/20 space-y-4">
                   {(() => {
+                    const myParticipant = details.participants?.find(p => p.userId === me?.id)
+                    if (!myParticipant) return null
+                    return (
+                      <div className="bg-zinc-800/50 border border-zinc-700/60 rounded-lg p-3 space-y-2">
+                        <div className="text-xs font-bold text-purple-300 uppercase tracking-wider">👥 A tua dupla</div>
+                        {myParticipant.partnerStatus === 'ACEITE' ? (
+                          <div className="flex items-center gap-2 text-sm">
+                            <Avatar className="w-7 h-7"><AvatarImage src={myParticipant.partner?.photoUrl} /><AvatarFallback>{myParticipant.partner?.ffNickname?.[0]}</AvatarFallback></Avatar>
+                            <span className="text-white font-medium">{myParticipant.partner?.ffNickname || myParticipant.partner?.name}</span>
+                            <Badge className="bg-green-500/20 text-green-300 text-[10px]">Confirmado</Badge>
+                          </div>
+                        ) : myParticipant.partnerStatus === 'PENDENTE' ? (
+                          <div className="flex items-center justify-between gap-2 flex-wrap">
+                            <span className="text-sm text-yellow-300">⏳ A aguardar que {myParticipant.partner?.ffNickname || myParticipant.partner?.name || 'o teu amigo'} aceite...</span>
+                            {t.status === 'ABERTO' && <Button size="sm" variant="outline" disabled={busy} onClick={() => cancelPartnerInvite(t)} className="border-red-500/40 text-red-400 h-7 text-xs">Cancelar</Button>}
+                          </div>
+                        ) : t.status === 'ABERTO' ? (
+                          <div className="flex gap-2 flex-wrap">
+                            <input type="email" placeholder="Email do teu amigo" value={partnerEmailDrafts[t.id] || ''} onChange={e => setPartnerEmailDrafts(d => ({ ...d, [t.id]: e.target.value }))} className="flex-1 min-w-[180px] bg-zinc-900 border border-zinc-700 text-white rounded-md px-3 py-1.5 text-sm" />
+                            <Button size="sm" disabled={busy} onClick={() => invitePartner(t)} className="bg-purple-600 hover:bg-purple-700">Convidar</Button>
+                          </div>
+                        ) : (
+                          <span className="text-xs text-zinc-500">Jogaste sozinho neste torneio.</span>
+                        )}
+                      </div>
+                    )
+                  })()}
+
+                  {t.status === 'ABERTO' && (
+                    <div>
+                      <div className="text-xs font-bold text-purple-300 uppercase mb-2">Jogadores inscritos ({details.participants?.length || 0})</div>
+                      <div className="space-y-1">
+                        {(details.participants || []).map(p => (
+                          <div key={p.id} className="flex items-center gap-2 text-sm bg-muted/20 rounded-lg p-2">
+                            <Avatar className="w-6 h-6"><AvatarImage src={p.user?.photoUrl} /><AvatarFallback>{p.user?.ffNickname?.[0]}</AvatarFallback></Avatar>
+                            <span>{p.user?.ffNickname || p.user?.name}</span>
+                            {p.partnerStatus === 'ACEITE' && <span className="text-zinc-400">+ {p.partner?.ffNickname || p.partner?.name}</span>}
+                            {p.partnerStatus === 'PENDENTE' && <span className="text-xs text-yellow-400">(convite pendente)</span>}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {(() => {
                     const active = myMatch(details.matches)
                     const conflict = myConflict(details.matches)
                     if (active) {
@@ -1773,7 +1873,7 @@ function TournamentsView({ me }) {
                           <div className="flex items-center justify-between gap-3 mb-3">
                             <div className="flex-1 text-center">
                               <Avatar className="w-14 h-14 mx-auto ring-2 ring-purple-500/60"><AvatarImage src={details.umap?.[me?.id]?.photoUrl} /><AvatarFallback>{details.umap?.[me?.id]?.ffNickname?.[0]}</AvatarFallback></Avatar>
-                              <div className="font-bold text-sm mt-1">{details.umap?.[me?.id]?.ffNickname || 'Tu'}</div>
+                              <div className="font-bold text-sm mt-1">{details.umap?.[me?.id]?.ffNickname || 'Tu'}{details.partnerMap?.[me?.id] && <span className="text-purple-300"> + {details.partnerMap[me.id].ffNickname}</span>}</div>
                               <div className="text-xs text-muted-foreground mb-1">{details.umap?.[me?.id]?.wins}V</div>
                               {iAmP1
                                 ? <span className="inline-block bg-green-500/20 border border-green-500/40 text-green-300 text-[10px] font-bold px-2 py-0.5 rounded-full">🎮 Cria a sala</span>
@@ -1783,7 +1883,7 @@ function TournamentsView({ me }) {
                             <div className="text-2xl font-black text-yellow-400">VS</div>
                             <div className="flex-1 text-center">
                               <Avatar className="w-14 h-14 mx-auto ring-2 ring-red-500/60"><AvatarImage src={opp?.photoUrl} /><AvatarFallback>{opp?.ffNickname?.[0]}</AvatarFallback></Avatar>
-                              <div className="font-bold text-sm mt-1">{opp?.ffNickname || '?'}</div>
+                              <div className="font-bold text-sm mt-1">{opp?.ffNickname || '?'}{details.partnerMap?.[oppId] && <span className="text-purple-300"> + {details.partnerMap[oppId].ffNickname}</span>}</div>
                               <div className="text-xs text-muted-foreground mb-1">{opp?.wins}V</div>
                               {iAmP1
                                 ? <span className="inline-block bg-blue-500/20 border border-blue-500/40 text-blue-300 text-[10px] font-bold px-2 py-0.5 rounded-full">⚔️ Entra na sala</span>
@@ -1849,9 +1949,9 @@ function TournamentsView({ me }) {
                           const isMine = m.player1Id === me?.id || m.player2Id === me?.id
                           return (
                             <div key={m.id} className={`flex items-center gap-2 text-sm p-2.5 rounded-lg ${isMine ? 'bg-purple-500/15 border border-purple-500/30' : 'bg-muted/20'}`}>
-                              <span className={m.winnerId === m.player1Id ? 'font-bold text-green-300' : m.winnerId ? 'text-muted-foreground line-through' : ''}>{p1?.ffNickname || '?'}</span>
+                              <span className={m.winnerId === m.player1Id ? 'font-bold text-green-300' : m.winnerId ? 'text-muted-foreground line-through' : ''}>{p1?.ffNickname || '?'}{details.partnerMap?.[m.player1Id] && ` + ${details.partnerMap[m.player1Id].ffNickname}`}</span>
                               <span className="text-muted-foreground text-xs">vs</span>
-                              <span className={m.winnerId === m.player2Id ? 'font-bold text-green-300' : m.winnerId ? 'text-muted-foreground line-through' : ''}>{p2?.ffNickname || '?'}</span>
+                              <span className={m.winnerId === m.player2Id ? 'font-bold text-green-300' : m.winnerId ? 'text-muted-foreground line-through' : ''}>{p2?.ffNickname || '?'}{details.partnerMap?.[m.player2Id] && ` + ${details.partnerMap[m.player2Id].ffNickname}`}</span>
                               <span className="ml-auto text-xs">
                                 {m.status === 'FINALIZADA' && <span className="text-green-400">✓</span>}
                                 {m.status === 'EM_CONFLITO' && <span className="text-orange-300">⚠</span>}
