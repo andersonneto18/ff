@@ -1985,7 +1985,7 @@ function TournamentsView({ me }) {
                                     A aguardar resposta do adversário...
                                     {active.firstClaimAt && (() => {
                                       const elapsed = Date.now() - new Date(active.firstClaimAt).getTime()
-                                      const remaining = Math.max(0, 2 * 60 * 60 * 1000 - elapsed)
+                                      const remaining = Math.max(0, 15 * 60 * 1000 - elapsed)
                                       const mins = Math.ceil(remaining / 60000)
                                       return remaining > 0
                                         ? <div className="text-xs text-yellow-400 mt-1">⏱ Avanças automaticamente em {mins < 60 ? `${mins} min` : `${Math.ceil(mins/60)}h`} se não responder</div>

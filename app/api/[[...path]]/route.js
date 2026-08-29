@@ -833,8 +833,8 @@ async function handleRoute(request, { params }) {
             .map(p => [p.userId, umap[p.partnerId]])
         )
         let matches = await db.collection('tournament_matches').find({ tournamentId: tId }).sort({ round: 1 }).toArray()
-        // Auto-timeout: if one player claimed and opponent didn't respond in 2h, auto-advance claimer
-        const TIMEOUT_MS = 2 * 60 * 60 * 1000
+        // Auto-timeout: if one player claimed and opponent didn't respond in 15min, auto-advance claimer
+        const TIMEOUT_MS = 15 * 60 * 1000
         for (const m of matches) {
           if (m.status !== 'PENDENTE' || !m.firstClaimAt) continue
           const oneClaimed = (m.claim1 && !m.claim2) || (!m.claim1 && m.claim2)
