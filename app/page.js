@@ -1809,12 +1809,7 @@ function TournamentsView({ me }) {
                   </div>
                 )}
                 {!isJoined && partnerOfInviter && t.status === 'ABERTO' && (
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <Badge className="bg-purple-500/20 text-purple-300">🤝 Vais jogar como dupla de {partnerOfInviter.ffNickname || partnerOfInviter.name}</Badge>
-                    <Button variant="outline" size="sm" disabled={busy} onClick={() => respondInvite(t.id, false)} className="border-red-500/40 text-red-400 hover:bg-red-500/10 h-7 text-xs">
-                      Sair da Dupla
-                    </Button>
-                  </div>
+                  <Badge className="bg-purple-500/20 text-purple-300">🤝 Vais jogar como dupla de {partnerOfInviter.ffNickname || partnerOfInviter.name}</Badge>
                 )}
                 {!isJoined && partnerOfInviter && t.status === 'EM_ANDAMENTO' && (
                   <Badge className="bg-purple-500/20 text-purple-300">🤝 Estás a jogar como dupla de {partnerOfInviter.ffNickname || partnerOfInviter.name}</Badge>
@@ -1834,12 +1829,9 @@ function TournamentsView({ me }) {
                       return (
                         <div className="bg-purple-500/10 border border-purple-500/30 rounded-lg p-3 space-y-2">
                           <div className="text-xs font-bold text-purple-300 uppercase tracking-wider">🤝 A tua dupla</div>
-                          <div className="flex items-center justify-between gap-2 flex-wrap">
-                            <div className="flex items-center gap-2 text-sm">
-                              <Avatar className="w-7 h-7"><AvatarImage src={asPartner.user?.photoUrl} /><AvatarFallback>{asPartner.user?.ffNickname?.[0]}</AvatarFallback></Avatar>
-                              <span>Vais jogar com <span className="text-white font-medium">{asPartner.user?.ffNickname || asPartner.user?.name}</span>, que fez a inscrição.</span>
-                            </div>
-                            {t.status === 'ABERTO' && <Button size="sm" variant="outline" disabled={busy} onClick={() => respondInvite(t.id, false)} className="border-red-500/40 text-red-400 h-7 text-xs">Sair da Dupla</Button>}
+                          <div className="flex items-center gap-2 text-sm">
+                            <Avatar className="w-7 h-7"><AvatarImage src={asPartner.user?.photoUrl} /><AvatarFallback>{asPartner.user?.ffNickname?.[0]}</AvatarFallback></Avatar>
+                            <span>Vais jogar com <span className="text-white font-medium">{asPartner.user?.ffNickname || asPartner.user?.name}</span>, que fez a inscrição.</span>
                           </div>
                         </div>
                       )
