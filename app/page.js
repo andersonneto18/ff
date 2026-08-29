@@ -2013,11 +2013,24 @@ function TournamentsView({ me }) {
                     return null
                   })()}
 
-                  {[...new Set((details.matches || []).map(m => m.round))].map(round => (
+                  {[...new Set((details.matches || []).map(m => m.round))].map(round => {
+                    // A round with a single match is always the final — whoever wins it takes the
+                    // tournament, no further round gets generated after.
+                    const roundMatches = (details.matches || []).filter(m => m.round === round)
+                    const isFinalRound = roundMatches.length === 1
+                    return (
                     <div key={round}>
-                      <div className="text-xs font-bold text-purple-300 uppercase mb-2">Ronda {round}</div>
+                      {isFinalRound ? (
+                        <div className="flex items-center gap-2 mb-2">
+                          <div className="h-px flex-1 bg-gradient-to-r from-transparent to-yellow-500/50" />
+                          <span className="text-sm font-black text-yellow-300 uppercase tracking-widest flex items-center gap-1.5">🏆 Final</span>
+                          <div className="h-px flex-1 bg-gradient-to-l from-transparent to-yellow-500/50" />
+                        </div>
+                      ) : (
+                        <div className="text-xs font-bold text-purple-300 uppercase mb-2">Ronda {round}</div>
+                      )}
                       <div className="space-y-1">
-                        {(details.matches || []).filter(m => m.round === round).map(m => {
+                        {roundMatches.map(m => {
                           const p1 = details.umap?.[m.player1Id]; const p2 = details.umap?.[m.player2Id]
                           // "Mine" also covers an accepted duo partner watching their own team's duel,
                           // not just the account that registered/paid.
@@ -2066,7 +2079,7 @@ function TournamentsView({ me }) {
                         })}
                       </div>
                     </div>
-                  ))}
+                  )})}
 
                   {t.status === 'FINALIZADO' && details.tournament?.winnerId && (
                     <div className="text-center py-2">
