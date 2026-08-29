@@ -1600,8 +1600,10 @@ function SupportChat({ me }) {
 
 function TournamentsView({ me }) {
   const api = useApi()
+  const router = useRouter()
+  const sp = useSearchParams()
   const [list, setList] = useState([])
-  const [selected, setSelected] = useState(null)
+  const [selected, setSelected] = useState(sp.get('tid') || null)
   const [details, setDetails] = useState(null)
   const [busy, setBusy] = useState(false)
   const [reportMatchId, setReportMatchId] = useState(null)
@@ -1624,6 +1626,11 @@ function TournamentsView({ me }) {
 
   useEffect(() => { load(); loadInvites(); const i = setInterval(() => { load(); loadInvites() }, 5000); return () => clearInterval(i) }, [load, loadInvites])
   useEffect(() => { if (selected) loadDetails(selected) }, [selected, loadDetails])
+  // Deep-link from elsewhere (e.g. the Arena home invite banner): ?tid=<id> auto-opens that tournament
+  useEffect(() => {
+    const tid = sp.get('tid')
+    if (tid && tid !== selected) setSelected(tid)
+  }, [sp])
 
   const respondInvite = async (tournamentId, accept) => {
     setBusy(true)
@@ -1695,16 +1702,18 @@ function TournamentsView({ me }) {
       {invites.length > 0 && (
         <div className="space-y-2">
           {invites.map(inv => (
-            <Card key={inv.tournamentId} className="glow-card border-yellow-500/40 p-4 flex items-center justify-between gap-3 flex-wrap">
+            <Card key={inv.tournamentId} className="glow-card border-yellow-500/40 p-4 flex items-center justify-between gap-3 flex-wrap cursor-pointer hover:border-yellow-500/70 transition"
+              onClick={() => { setSelected(inv.tournamentId); router.replace(`/?view=tournaments&tid=${inv.tournamentId}`) }}>
               <div className="flex items-center gap-2">
                 <Avatar className="w-9 h-9"><AvatarImage src={inv.inviter?.photoUrl} /><AvatarFallback>{inv.inviter?.ffNickname?.[0]}</AvatarFallback></Avatar>
                 <div className="text-sm">
                   <b>{inv.inviter?.name}</b> convidou-te para jogares como dupla em <b>{inv.tournamentName}</b>
+                  <div className="text-xs text-muted-foreground">Clica para ver regras, prémios e outras duplas</div>
                 </div>
               </div>
               <div className="flex gap-2">
-                <Button size="sm" disabled={busy} onClick={() => respondInvite(inv.tournamentId, true)} className="bg-green-600 hover:bg-green-700">Aceitar</Button>
-                <Button size="sm" variant="outline" disabled={busy} onClick={() => respondInvite(inv.tournamentId, false)} className="border-red-500/40 text-red-400">Recusar</Button>
+                <Button size="sm" disabled={busy} onClick={(e) => { e.stopPropagation(); respondInvite(inv.tournamentId, true) }} className="bg-green-600 hover:bg-green-700">Aceitar</Button>
+                <Button size="sm" variant="outline" disabled={busy} onClick={(e) => { e.stopPropagation(); respondInvite(inv.tournamentId, false) }} className="border-red-500/40 text-red-400">Recusar</Button>
               </div>
             </Card>
           ))}
@@ -2207,16 +2216,18 @@ function Dashboard({ me, onLogout, refreshMe }) {
           {tournInvites.length > 0 && (
             <div className="space-y-2">
               {tournInvites.map(inv => (
-                <Card key={inv.tournamentId} className="glow-card border-yellow-500/40 p-4 flex items-center justify-between gap-3 flex-wrap">
+                <Card key={inv.tournamentId} className="glow-card border-yellow-500/40 p-4 flex items-center justify-between gap-3 flex-wrap cursor-pointer hover:border-yellow-500/70 transition"
+                  onClick={() => { setView('tournaments'); router.replace(`/?view=tournaments&tid=${inv.tournamentId}`) }}>
                   <div className="flex items-center gap-2">
                     <Avatar className="w-9 h-9"><AvatarImage src={inv.inviter?.photoUrl} /><AvatarFallback>{inv.inviter?.ffNickname?.[0]}</AvatarFallback></Avatar>
                     <div className="text-sm">
                       <b>{inv.inviter?.name}</b> convidou-te para jogares como dupla em <b>{inv.tournamentName}</b>
+                      <div className="text-xs text-muted-foreground">Clica para ver regras, prémios e outras duplas</div>
                     </div>
                   </div>
                   <div className="flex gap-2">
-                    <Button size="sm" onClick={() => respondTournInvite(inv.tournamentId, true)} className="bg-green-600 hover:bg-green-700">Aceitar</Button>
-                    <Button size="sm" variant="outline" onClick={() => respondTournInvite(inv.tournamentId, false)} className="border-red-500/40 text-red-400">Recusar</Button>
+                    <Button size="sm" onClick={(e) => { e.stopPropagation(); respondTournInvite(inv.tournamentId, true) }} className="bg-green-600 hover:bg-green-700">Aceitar</Button>
+                    <Button size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); respondTournInvite(inv.tournamentId, false) }} className="border-red-500/40 text-red-400">Recusar</Button>
                   </div>
                 </Card>
               ))}
