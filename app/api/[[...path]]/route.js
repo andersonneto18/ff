@@ -908,7 +908,17 @@ async function handleRoute(request, { params }) {
         if (!user) return ERR('Não autenticado', 401)
         const me = await db.collection('tournament_participants').findOne({ tournamentId: tId, userId: user.id })
         if (!me) return ERR('Não estás inscrito neste torneio')
-        if (tournament.status !== 'ABERTO') return ERR('Só podes gerir o parceiro antes do torneio começar')
+        // Duplas completas arrancam sozinhas assim que a última se inscreve, o que pode apanhar
+        // essa última pessoa sem tempo de convidar o parceiro — por isso também se permite
+        // gerir o parceiro depois de EM_ANDAMENTO, desde que o próprio duelo ainda não tenha começado.
+        if (tournament.status !== 'ABERTO') {
+          if (tournament.status === 'EM_ANDAMENTO') {
+            const myMatch = await db.collection('tournament_matches').findOne({ tournamentId: tId, status: 'PENDENTE', $or: [{ player1Id: user.id }, { player2Id: user.id }] })
+            if (!myMatch || myMatch.startedAt) return ERR('Já não podes gerir o parceiro — o teu duelo já começou')
+          } else {
+            return ERR('Só podes gerir o parceiro antes do torneio começar')
+          }
+        }
         const { partnerEmail } = await request.json()
         const email = (partnerEmail || '').trim()
         if (!email) {
