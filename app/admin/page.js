@@ -1276,7 +1276,7 @@ function TournamentsSection() {
   }
 
   const start = async (t) => {
-    if (!(await askConfirm(`Iniciar torneio "${t.name}" com ${t.currentPlayers} jogadores?`))) return
+    if (!(await askConfirm(`Iniciar torneio "${t.name}" com ${t.currentPlayers} duplas inscritas?`))) return
     setBusy(true)
     try { await api(`/admin/tournaments/${t.id}/start`, { method: 'POST', body: '{}' }); toast.success('Torneio iniciado!'); load(); loadDetails(t.id) } catch (e) { toast.error(e.message) } finally { setBusy(false) }
   }
@@ -1314,10 +1314,11 @@ function TournamentsSection() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div><Label className="text-zinc-300">Nome *</Label><input value={form.name} onChange={e => setForm({...form, name: e.target.value})} required placeholder="Torneio Semanal #1" className="w-full mt-1 bg-zinc-800 border border-zinc-700 text-white rounded-md px-3 py-2 text-sm focus:outline-none focus:border-purple-500" /></div>
               <div><Label className="text-zinc-300">Entrada (€)</Label><input type="number" min="0" step="0.50" value={form.entryFeeEuros} onChange={e => setForm({...form, entryFeeEuros: e.target.value})} className="w-full mt-1 bg-zinc-800 border border-zinc-700 text-white rounded-md px-3 py-2 text-sm focus:outline-none focus:border-purple-500" /></div>
-              <div><Label className="text-zinc-300">Máx. Jogadores</Label>
+              <div><Label className="text-zinc-300">Máx. Duplas (inscrições)</Label>
                 <select value={form.maxPlayers} onChange={e => setForm({...form, maxPlayers: e.target.value})} className="w-full mt-1 bg-zinc-800 border border-zinc-700 text-white rounded-md px-3 py-2 text-sm focus:outline-none focus:border-purple-500">
-                  {[4,5,6,7,8,10,12,16,32].map(n => <option key={n} value={n}>{n} jogadores</option>)}
+                  {[4,5,6,7,8,10,12,16,32].map(n => <option key={n} value={n}>{n} duplas ({n * 2} jogadores)</option>)}
                 </select>
+                <p className="text-xs text-zinc-500 mt-1">Cada inscrição paga é 1 dupla — quem se inscreve pode convidar um parceiro para jogar junto, sem pagar de novo.</p>
               </div>
               <div><Label className="text-zinc-300">Descrição</Label><input value={form.description} onChange={e => setForm({...form, description: e.target.value})} placeholder="Regras gerais, prémios..." className="w-full mt-1 bg-zinc-800 border border-zinc-700 text-white rounded-md px-3 py-2 text-sm focus:outline-none focus:border-purple-500" /></div>
               <div><Label className="text-zinc-300">🎮 Modo</Label><input value={form.mode} onChange={e => setForm({...form, mode: e.target.value})} placeholder="ex: X1, Contra Squad, 2v2..." className="w-full mt-1 bg-zinc-800 border border-zinc-700 text-white rounded-md px-3 py-2 text-sm focus:outline-none focus:border-purple-500" /></div>
@@ -1356,7 +1357,7 @@ function TournamentsSection() {
             </div>
             {form.entryFeeEuros > 0 && (
               <div className="text-xs text-zinc-400 bg-zinc-800/60 rounded p-3">
-                Pote total ({form.maxPlayers} jogadores × {form.entryFeeEuros}€): <b className="text-white">{(form.maxPlayers * form.entryFeeEuros).toFixed(2)}€</b> →
+                Pote total ({form.maxPlayers} duplas × {form.entryFeeEuros}€): <b className="text-white">{(form.maxPlayers * form.entryFeeEuros).toFixed(2)}€</b> →
                 1º: <b className="text-yellow-300">{(form.maxPlayers * form.entryFeeEuros * 0.8 * 0.65).toFixed(2)}€</b> ·
                 2º: <b className="text-zinc-300">{(form.maxPlayers * form.entryFeeEuros * 0.8 * 0.35).toFixed(2)}€</b> ·
                 Plataforma: <b className="text-purple-300">{(form.maxPlayers * form.entryFeeEuros * 0.2).toFixed(2)}€</b>
@@ -1382,7 +1383,7 @@ function TournamentsSection() {
             </div>
             <div className="flex gap-4 text-xs text-zinc-400 mb-3">
               <span>💰 {t.entryFeeCents > 0 ? `${(t.entryFeeCents/100).toFixed(2)}€` : 'Grátis'}</span>
-              <span>👥 {t.currentPlayers}/{t.maxPlayers}</span>
+              <span>👥 {t.currentPlayers}/{t.maxPlayers} duplas</span>
               <span>🏆 Pote: {((t.entryFeeCents * t.maxPlayers)/100).toFixed(2)}€</span>
             </div>
             <div className="flex gap-2 flex-wrap" onClick={e => e.stopPropagation()}>
