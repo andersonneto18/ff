@@ -1614,8 +1614,9 @@ function TournamentsView({ me }) {
   const [partnerEmailDrafts, setPartnerEmailDrafts] = useState({})
   const [chatMatchId, setChatMatchId] = useState(null)
   const [commissionPercent, setCommissionPercent] = useState(20)
+  const [tournamentFeesEnabled, setTournamentFeesEnabled] = useState(true)
 
-  useEffect(() => { fetch('/api/platform-status').then(r => r.json()).then(s => { if (s.commissionPercent) setCommissionPercent(s.commissionPercent) }).catch(() => {}) }, [])
+  useEffect(() => { fetch('/api/platform-status').then(r => r.json()).then(s => { if (s.commissionPercent) setCommissionPercent(s.commissionPercent); setTournamentFeesEnabled(s.tournamentFeesEnabled !== false) }).catch(() => {}) }, [])
 
   const load = useCallback(async () => {
     try { const d = await api('/tournaments'); setList(d.tournaments || []) } catch (e) {}
@@ -1770,7 +1771,7 @@ function TournamentsView({ me }) {
           const totalPot = (t.entryFeeCents * t.maxPlayers) / 100
           // Winner takes all — once the tournament has actually started, use the real computed
           // prize instead of this pre-start estimate (which assumes the standard commission rate).
-          const prize1 = t.prizeFirstCents != null ? (t.prizeFirstCents / 100).toFixed(2) : (totalPot * (1 - commissionPercent / 100)).toFixed(2)
+          const prize1 = t.prizeFirstCents != null ? (t.prizeFirstCents / 100).toFixed(2) : (totalPot * (tournamentFeesEnabled ? 1 - commissionPercent / 100 : 1)).toFixed(2)
 
           return (
             <Card key={t.id} className="glow-card border-purple-500/20 p-5">
@@ -2290,6 +2291,7 @@ function TournamentInviteModal({ invite, onClose, onDone }) {
   const [details, setDetails] = useState(null)
   const [busy, setBusy] = useState(false)
   const [commissionPercent, setCommissionPercent] = useState(20)
+  const [tournamentFeesEnabled, setTournamentFeesEnabled] = useState(true)
 
   useEffect(() => {
     setDetails(null)
@@ -2297,7 +2299,7 @@ function TournamentInviteModal({ invite, onClose, onDone }) {
     api(`/tournaments/${invite.tournamentId}`).then(setDetails).catch(() => {})
   }, [invite, api])
 
-  useEffect(() => { fetch('/api/platform-status').then(r => r.json()).then(s => { if (s.commissionPercent) setCommissionPercent(s.commissionPercent) }).catch(() => {}) }, [])
+  useEffect(() => { fetch('/api/platform-status').then(r => r.json()).then(s => { if (s.commissionPercent) setCommissionPercent(s.commissionPercent); setTournamentFeesEnabled(s.tournamentFeesEnabled !== false) }).catch(() => {}) }, [])
 
   const respond = async (accept) => {
     setBusy(true)
@@ -2312,7 +2314,7 @@ function TournamentInviteModal({ invite, onClose, onDone }) {
   if (!invite) return null
   const t = details?.tournament
   const totalPot = t ? (t.entryFeeCents * t.maxPlayers) / 100 : 0
-  const prize1 = t ? (t.prizeFirstCents != null ? (t.prizeFirstCents / 100).toFixed(2) : (totalPot * (1 - commissionPercent / 100)).toFixed(2)) : '0.00'
+  const prize1 = t ? (t.prizeFirstCents != null ? (t.prizeFirstCents / 100).toFixed(2) : (totalPot * (tournamentFeesEnabled ? 1 - commissionPercent / 100 : 1)).toFixed(2)) : '0.00'
 
   return (
     <Dialog open={!!invite} onOpenChange={(v) => !v && onClose()}>
@@ -2451,10 +2453,11 @@ function Dashboard({ me, onLogout, refreshMe }) {
   const [bonusEnabled, setBonusEnabled] = useState(false)
   const [topupsEnabled, setTopupsEnabled] = useState(true)
   const [commissionPercent, setCommissionPercent] = useState(20)
+  const [tournamentFeesEnabled, setTournamentFeesEnabled] = useState(true)
   const api = useApi()
 
   useEffect(() => {
-    const load = () => fetch('/api/platform-status').then(r => r.json()).then(d => { setStripeEnabled(d.stripeEnabled); setBonusEnabled(d.bonusEnabled || false); setTopupsEnabled(d.topupsEnabled !== false); if (d.commissionPercent) setCommissionPercent(d.commissionPercent) }).catch(() => {})
+    const load = () => fetch('/api/platform-status').then(r => r.json()).then(d => { setStripeEnabled(d.stripeEnabled); setBonusEnabled(d.bonusEnabled || false); setTopupsEnabled(d.topupsEnabled !== false); if (d.commissionPercent) setCommissionPercent(d.commissionPercent); setTournamentFeesEnabled(d.tournamentFeesEnabled !== false) }).catch(() => {})
     load()
     const i = setInterval(load, 30000)
     return () => clearInterval(i)
@@ -2555,7 +2558,7 @@ function Dashboard({ me, onLogout, refreshMe }) {
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {arenaTourn.map(t => {
                   const totalPot = (t.entryFeeCents * t.maxPlayers) / 100
-                  const prize1 = t.prizeFirstCents != null ? (t.prizeFirstCents / 100).toFixed(2) : (totalPot * (1 - commissionPercent / 100)).toFixed(2)
+                  const prize1 = t.prizeFirstCents != null ? (t.prizeFirstCents / 100).toFixed(2) : (totalPot * (tournamentFeesEnabled ? 1 - commissionPercent / 100 : 1)).toFixed(2)
                   const isOpen = t.status === 'ABERTO'
                   return (
                     <Card key={t.id} className="glow-card border-yellow-500/30 p-4 cursor-pointer hover:scale-[1.01] transition" onClick={() => setViewClean('tournaments')}>

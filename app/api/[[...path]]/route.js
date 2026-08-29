@@ -190,7 +190,7 @@ async function handleRoute(request, { params }) {
     if (route === '/platform-status' && method === 'GET') {
       const rows = await db.collection('platform_settings').find({}).toArray()
       const map = Object.fromEntries(rows.map(s => [s.key, s.value]))
-      return J({ topupsEnabled: map.topupsEnabled !== '0', stripeEnabled: map.stripeEnabled !== '0', bonusEnabled: map.bonusEnabled === '1', mbwayPhone: map.mbwayPhone || null, platformIban: map.platformIban || null, commissionPercent: Math.round(COMMISSION * 100) })
+      return J({ topupsEnabled: map.topupsEnabled !== '0', stripeEnabled: map.stripeEnabled !== '0', bonusEnabled: map.bonusEnabled === '1', mbwayPhone: map.mbwayPhone || null, platformIban: map.platformIban || null, commissionPercent: Math.round(COMMISSION * 100), tournamentFeesEnabled: map.tournamentFeesEnabled !== '0' })
     }
 
     // ===== AUTH =====
