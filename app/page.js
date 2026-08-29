@@ -1610,6 +1610,7 @@ function TournamentsView({ me }) {
   const [reportForm, setReportForm] = useState({ reason: '', files: [] })
   const [rulesModal, setRulesModal] = useState(null)
   const [invites, setInvites] = useState([])
+  const [inviteModal, setInviteModal] = useState(null)
   const [partnerEmailDrafts, setPartnerEmailDrafts] = useState({})
 
   const load = useCallback(async () => {
@@ -1697,23 +1698,20 @@ function TournamentsView({ me }) {
 
   return (
     <div className="space-y-6">
+      <TournamentInviteModal invite={inviteModal} onClose={() => setInviteModal(null)} onDone={() => { loadInvites(); load(); if (selected) loadDetails(selected) }} />
       <div><h1 className="text-3xl font-black gradient-text">Torneios</h1><p className="text-sm text-muted-foreground">Inscreve-te, elimina os adversários e leva o prémio</p></div>
 
       {invites.length > 0 && (
         <div className="space-y-2">
           {invites.map(inv => (
             <Card key={inv.tournamentId} className="glow-card border-yellow-500/40 p-4 flex items-center justify-between gap-3 flex-wrap cursor-pointer hover:border-yellow-500/70 transition"
-              onClick={() => { setSelected(inv.tournamentId); router.replace(`/?view=tournaments&tid=${inv.tournamentId}`) }}>
+              onClick={() => setInviteModal(inv)}>
               <div className="flex items-center gap-2">
                 <Avatar className="w-9 h-9"><AvatarImage src={inv.inviter?.photoUrl} /><AvatarFallback>{inv.inviter?.ffNickname?.[0]}</AvatarFallback></Avatar>
                 <div className="text-sm">
                   <b>{inv.inviter?.name}</b> convidou-te para jogares como dupla em <b>{inv.tournamentName}</b>
-                  <div className="text-xs text-muted-foreground">Clica para ver regras, prémios e outras duplas</div>
+                  <div className="text-xs text-muted-foreground">Clica para ver detalhes e responder</div>
                 </div>
-              </div>
-              <div className="flex gap-2">
-                <Button size="sm" disabled={busy} onClick={(e) => { e.stopPropagation(); respondInvite(inv.tournamentId, true) }} className="bg-green-600 hover:bg-green-700">Aceitar</Button>
-                <Button size="sm" variant="outline" disabled={busy} onClick={(e) => { e.stopPropagation(); respondInvite(inv.tournamentId, false) }} className="border-red-500/40 text-red-400">Recusar</Button>
               </div>
             </Card>
           ))}
@@ -2162,6 +2160,97 @@ function Shell({ me, onLogout, view, setView, children, stripeEnabled }) {
   )
 }
 
+// Shown when a player clicks a duo-invite banner — full tournament context (rules, prizes,
+// other registered duos) with Accept/Decline right there, instead of just navigating away.
+function TournamentInviteModal({ invite, onClose, onDone }) {
+  const api = useApi()
+  const [details, setDetails] = useState(null)
+  const [busy, setBusy] = useState(false)
+
+  useEffect(() => {
+    setDetails(null)
+    if (!invite) return
+    api(`/tournaments/${invite.tournamentId}`).then(setDetails).catch(() => {})
+  }, [invite, api])
+
+  const respond = async (accept) => {
+    setBusy(true)
+    try {
+      await api(`/tournaments/${invite.tournamentId}/partner-response`, { method: 'POST', body: JSON.stringify({ accept }) })
+      toast.success(accept ? 'Convite aceite!' : 'Convite recusado')
+      onDone?.()
+      onClose()
+    } catch (e) { toast.error(e.message) } finally { setBusy(false) }
+  }
+
+  if (!invite) return null
+  const t = details?.tournament
+  const totalPot = t ? (t.entryFeeCents * t.maxPlayers) / 100 : 0
+  const prize2 = t ? (t.entryFeeCents / 100).toFixed(2) : '0.00'
+  const prize1 = t ? (totalPot * 0.8 - parseFloat(prize2)).toFixed(2) : '0.00'
+
+  return (
+    <Dialog open={!!invite} onOpenChange={(v) => !v && onClose()}>
+      <DialogContent className="bg-card border-yellow-500/30 w-[calc(100vw-2rem)] sm:max-w-lg max-h-[90dvh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2"><Trophy className="w-5 h-5 text-yellow-400" /> Convite de Dupla</DialogTitle>
+        </DialogHeader>
+        {!t ? (
+          <div className="text-center text-muted-foreground py-8">A carregar...</div>
+        ) : (
+          <div className="space-y-4">
+            <div className="flex items-center gap-2 bg-purple-500/10 border border-purple-500/30 rounded-lg p-3">
+              <Avatar className="w-9 h-9"><AvatarImage src={invite.inviter?.photoUrl} /><AvatarFallback>{invite.inviter?.ffNickname?.[0]}</AvatarFallback></Avatar>
+              <div className="text-sm"><b>{invite.inviter?.name}</b> convidou-te para jogares como dupla</div>
+            </div>
+            <div>
+              <h3 className="font-black text-lg">{t.name}</h3>
+              {t.description && <p className="text-sm text-muted-foreground">{t.description}</p>}
+            </div>
+            <div className="grid grid-cols-3 gap-2 text-center">
+              <div className="glow-card rounded-lg p-2"><div className="text-xs text-muted-foreground">Jogadores</div><div className="font-bold">{t.currentPlayers}/{t.maxPlayers}</div></div>
+              <div className="glow-card rounded-lg p-2"><div className="text-xs text-muted-foreground">1º Lugar</div><div className="font-bold text-yellow-300">{prize1}€</div></div>
+              <div className="glow-card rounded-lg p-2"><div className="text-xs text-muted-foreground">2º Lugar</div><div className="font-bold text-zinc-300">{prize2}€</div></div>
+            </div>
+            {(t.mode || t.server || t.weapons || t.platform || t.characters || t.pets || t.rules) && (
+              <div className="bg-zinc-800/50 border border-zinc-700/60 rounded-lg p-3">
+                <div className="text-xs font-bold text-purple-300 uppercase tracking-wider mb-2">📋 Regras da Partida</div>
+                <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+                  {t.mode && <div><span className="text-zinc-400">🎮 Modo</span> <span className="text-white font-medium">{t.mode}</span></div>}
+                  {t.server && <div><span className="text-zinc-400">🌐 Servidor</span> <span className="text-white font-medium">{t.server}</span></div>}
+                  {t.weapons && <div><span className="text-zinc-400">🔫 Armas</span> <span className="text-white font-medium">{t.weapons}</span></div>}
+                  {t.platform && <div><span className="text-zinc-400">📱 Plataforma</span> <span className="text-white font-medium">{t.platform}</span></div>}
+                </div>
+                {t.characters && <p className="text-xs text-zinc-300 mt-2 pt-2 border-t border-zinc-700/60"><span className="text-zinc-400">🧬 Habilidades:</span> {t.characters}</p>}
+                {t.pets && <p className="text-xs text-zinc-300 mt-1.5"><span className="text-zinc-400">🐾 Pets:</span> {t.pets}</p>}
+                {t.rules && <p className="text-xs text-zinc-300 mt-2 pt-2 border-t border-zinc-700/60 whitespace-pre-wrap">{t.rules}</p>}
+              </div>
+            )}
+            <div>
+              <div className="text-xs font-bold text-purple-300 uppercase mb-2">Duplas inscritas ({details.participants.length})</div>
+              <div className="space-y-1 max-h-40 overflow-y-auto">
+                {details.participants.map(p => (
+                  <div key={p.id} className="flex items-center gap-2 text-sm bg-muted/20 rounded-lg p-2">
+                    <Avatar className="w-6 h-6"><AvatarImage src={p.user?.photoUrl} /><AvatarFallback>{p.user?.ffNickname?.[0]}</AvatarFallback></Avatar>
+                    <span>{p.user?.ffNickname || p.user?.name}</span>
+                    {p.partnerStatus === 'ACEITE' && <span className="text-zinc-400">+ {p.partner?.ffNickname || p.partner?.name}</span>}
+                    {p.partnerStatus === 'PENDENTE' && <span className="text-xs text-yellow-400">(convite pendente)</span>}
+                  </div>
+                ))}
+                {!details.participants.length && <div className="text-xs text-zinc-500">Ainda sem inscritos.</div>}
+              </div>
+            </div>
+          </div>
+        )}
+        <DialogFooter className="flex-row gap-2">
+          <Button variant="outline" disabled={busy} onClick={() => respond(false)} className="border-red-500/40 text-red-400 flex-1">Recusar</Button>
+          <Button disabled={busy || !t} onClick={() => respond(true)} className="bg-green-600 hover:bg-green-700 flex-1">Aceitar Convite</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
 function Dashboard({ me, onLogout, refreshMe }) {
   const router = useRouter()
   const sp = useSearchParams()
@@ -2170,6 +2259,7 @@ function Dashboard({ me, onLogout, refreshMe }) {
   const [myRooms, setMyRooms] = useState([])
   const [arenaTourn, setArenaTourn] = useState([])
   const [tournInvites, setTournInvites] = useState([])
+  const [inviteModal, setInviteModal] = useState(null)
   const [openRoom, setOpenRoom] = useState(sp.get('id') || null)
   const [createOpen, setCreateOpen] = useState(false)
   const [stripeEnabled, setStripeEnabled] = useState(false)
@@ -2211,16 +2301,9 @@ function Dashboard({ me, onLogout, refreshMe }) {
 
   const setViewClean = (v) => { setView(v); setOpenRoom(null); router.replace('/?view=' + v) }
 
-  const respondTournInvite = async (tournamentId, accept) => {
-    try {
-      await api(`/tournaments/${tournamentId}/partner-response`, { method: 'POST', body: JSON.stringify({ accept }) })
-      toast.success(accept ? 'Convite aceite!' : 'Convite recusado')
-      load()
-    } catch (e) { toast.error(e.message) }
-  }
-
   if (openRoom) return (
     <Shell me={me} onLogout={onLogout} view={view} setView={setViewClean}>
+      <TournamentInviteModal invite={inviteModal} onClose={() => setInviteModal(null)} onDone={load} />
       <CreateRoomDialog open={createOpen} onOpenChange={setCreateOpen} balanceCents={me.balanceCents} onNeedTopup={() => setViewClean('wallet')} onSuccess={() => { load(); refreshMe?.() }} />
       <RoomDetail roomId={openRoom} me={me} onBack={() => setViewClean('rooms')} refreshMe={refreshMe} />
     </Shell>
@@ -2228,6 +2311,7 @@ function Dashboard({ me, onLogout, refreshMe }) {
 
   return (
     <Shell me={me} onLogout={onLogout} view={view} setView={setViewClean}>
+      <TournamentInviteModal invite={inviteModal} onClose={() => setInviteModal(null)} onDone={load} />
       <CreateRoomDialog open={createOpen} onOpenChange={setCreateOpen} balanceCents={me.balanceCents} onNeedTopup={() => setViewClean('wallet')} onSuccess={() => { load(); refreshMe?.() }} />
       {view === 'rooms' && (
         <div className="space-y-6">
@@ -2244,17 +2328,13 @@ function Dashboard({ me, onLogout, refreshMe }) {
             <div className="space-y-2">
               {tournInvites.map(inv => (
                 <Card key={inv.tournamentId} className="glow-card border-yellow-500/40 p-4 flex items-center justify-between gap-3 flex-wrap cursor-pointer hover:border-yellow-500/70 transition"
-                  onClick={() => { setView('tournaments'); router.replace(`/?view=tournaments&tid=${inv.tournamentId}`) }}>
+                  onClick={() => setInviteModal(inv)}>
                   <div className="flex items-center gap-2">
                     <Avatar className="w-9 h-9"><AvatarImage src={inv.inviter?.photoUrl} /><AvatarFallback>{inv.inviter?.ffNickname?.[0]}</AvatarFallback></Avatar>
                     <div className="text-sm">
                       <b>{inv.inviter?.name}</b> convidou-te para jogares como dupla em <b>{inv.tournamentName}</b>
-                      <div className="text-xs text-muted-foreground">Clica para ver regras, prémios e outras duplas</div>
+                      <div className="text-xs text-muted-foreground">Clica para ver detalhes e responder</div>
                     </div>
-                  </div>
-                  <div className="flex gap-2">
-                    <Button size="sm" onClick={(e) => { e.stopPropagation(); respondTournInvite(inv.tournamentId, true) }} className="bg-green-600 hover:bg-green-700">Aceitar</Button>
-                    <Button size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); respondTournInvite(inv.tournamentId, false) }} className="border-red-500/40 text-red-400">Recusar</Button>
                   </div>
                 </Card>
               ))}
