@@ -1251,6 +1251,7 @@ function TournamentsSection() {
   const [details, setDetails] = useState(null)
   const [feesEnabled, setFeesEnabled] = useState(true)
   const [feesBusy, setFeesBusy] = useState(false)
+  const [commissionPercent, setCommissionPercent] = useState(20)
 
   const load = useCallback(async () => {
     try { const d = await api('/admin/tournaments'); setList(d.tournaments || []) } catch (e) {}
@@ -1258,6 +1259,7 @@ function TournamentsSection() {
 
   useEffect(() => { load(); const i = setInterval(load, 6000); return () => clearInterval(i) }, [load])
   useEffect(() => { api('/admin/settings').then(s => setFeesEnabled(s.tournamentFeesEnabled !== false)).catch(() => {}) }, [])
+  useEffect(() => { fetch('/api/platform-status').then(r => r.json()).then(s => { if (s.commissionPercent) setCommissionPercent(s.commissionPercent) }).catch(() => {}) }, [])
 
   const toggleFees = async () => {
     setFeesBusy(true)
@@ -1378,14 +1380,22 @@ function TournamentsSection() {
                 <textarea value={form.rules} onChange={e => setForm({...form, rules: e.target.value})} rows={4} placeholder="ex: Sem usar personagens pagos, proibido usar granadas, Kill cam obrigatória para provar vitória..." className="w-full mt-1 bg-zinc-800 border border-zinc-700 text-white rounded-md px-3 py-2 text-sm focus:outline-none focus:border-purple-500 resize-none" />
               </div>
             </div>
-            {form.entryFeeEuros > 0 && (
-              <div className="text-xs text-zinc-400 bg-zinc-800/60 rounded p-3">
-                Pote total ({form.maxPlayers} duplas × {form.entryFeeEuros}€): <b className="text-white">{(form.maxPlayers * form.entryFeeEuros).toFixed(2)}€</b> →
-                1º: <b className="text-yellow-300">{(form.maxPlayers * form.entryFeeEuros * 0.8 * 0.65).toFixed(2)}€</b> ·
-                2º: <b className="text-zinc-300">{(form.maxPlayers * form.entryFeeEuros * 0.8 * 0.35).toFixed(2)}€</b> ·
-                Plataforma: <b className="text-purple-300">{(form.maxPlayers * form.entryFeeEuros * 0.2).toFixed(2)}€</b>
-              </div>
-            )}
+            {form.entryFeeEuros > 0 && (() => {
+              const totalPot = form.maxPlayers * form.entryFeeEuros
+              const commissionCut = feesEnabled ? commissionPercent / 100 : 0
+              const net = totalPot * (1 - commissionCut)
+              const prize2 = net * 0.35
+              const prize1 = net - prize2
+              return (
+                <div className="text-xs text-zinc-400 bg-zinc-800/60 rounded p-3">
+                  Pote total ({form.maxPlayers} duplas × {form.entryFeeEuros}€): <b className="text-white">{totalPot.toFixed(2)}€</b> →
+                  1º: <b className="text-yellow-300">{prize1.toFixed(2)}€</b> ·
+                  2º: <b className="text-zinc-300">{prize2.toFixed(2)}€</b> ·
+                  Plataforma: <b className="text-purple-300">{(totalPot - net).toFixed(2)}€</b>
+                  {!feesEnabled && <span className="text-yellow-400 ml-1">(taxas desativadas)</span>}
+                </div>
+              )
+            })()}
             <div className="flex gap-2">
               <Button type="submit" disabled={busy} className="bg-purple-600">{busy ? 'A criar...' : 'Criar'}</Button>
               <Button type="button" variant="outline" onClick={() => setCreating(false)} className="border-zinc-700">Cancelar</Button>
