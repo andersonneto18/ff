@@ -2019,11 +2019,15 @@ function TournamentsView({ me }) {
                       <div className="space-y-1">
                         {(details.matches || []).filter(m => m.round === round).map(m => {
                           const p1 = details.umap?.[m.player1Id]; const p2 = details.umap?.[m.player2Id]
-                          const isMine = m.player1Id === me?.id || m.player2Id === me?.id
-                          const side = (u, id) => (
-                            <span className={id === me?.id ? 'text-purple-200 font-black' : (m.winnerId === id ? 'font-bold text-green-300' : m.winnerId ? 'text-muted-foreground line-through' : '')}>
+                          // "Mine" also covers an accepted duo partner watching their own team's duel,
+                          // not just the account that registered/paid.
+                          const iAmSide1 = m.player1Id === me?.id || details.partnerMap?.[m.player1Id]?.id === me?.id
+                          const iAmSide2 = m.player2Id === me?.id || details.partnerMap?.[m.player2Id]?.id === me?.id
+                          const isMine = iAmSide1 || iAmSide2
+                          const side = (u, id, isMySide) => (
+                            <span className={id === me?.id ? 'text-purple-200 font-black' : (m.winnerId === id ? 'font-bold text-green-300' : m.winnerId ? 'text-muted-foreground line-through' : (isMySide ? 'text-purple-200 font-bold' : ''))}>
                               {id === me?.id ? 'EU' : (u?.ffNickname || '?')}
-                              {details.partnerMap?.[id] && <span className={id === me?.id ? 'text-purple-300/80 font-bold' : 'text-zinc-400 font-normal'}> + {details.partnerMap[id].ffNickname}</span>}
+                              {details.partnerMap?.[id] && <span className={id === me?.id || isMySide ? 'text-purple-300 font-bold' : 'text-zinc-400 font-normal'}> + {details.partnerMap[id].ffNickname}</span>}
                             </span>
                           )
                           const status = (
@@ -2032,22 +2036,30 @@ function TournamentsView({ me }) {
                               {m.status === 'EM_CONFLITO' && <span className="text-orange-300">⚠</span>}
                             </span>
                           )
-                          if (isMine) return (
-                            <div key={m.id} className="relative overflow-hidden rounded-xl border-2 border-purple-500/60 bg-gradient-to-r from-purple-600/20 via-purple-500/10 to-blue-500/10 p-3 shadow-[0_0_20px_-8px_rgba(168,85,247,0.6)]">
-                              <div className="absolute top-1.5 right-2 text-[9px] font-black text-purple-300 uppercase tracking-wider">⭐ O teu duelo</div>
-                              <div className="flex items-center gap-2 text-sm pt-2.5 flex-wrap">
-                                {side(p1, m.player1Id)}
-                                <span className="text-yellow-400 font-black text-xs">VS</span>
-                                {side(p2, m.player2Id)}
-                                {status}
+                          if (isMine) {
+                            const finished = m.status === 'FINALIZADA'
+                            const iWon = finished && ((iAmSide1 && m.winnerId === m.player1Id) || (iAmSide2 && m.winnerId === m.player2Id))
+                            const tag = !finished ? '⭐ O teu duelo' : (iWon ? '🏆 Venceste!' : '❌ Perdeste')
+                            const borderCls = !finished ? 'border-purple-500/60 shadow-[0_0_20px_-8px_rgba(168,85,247,0.6)]' : iWon ? 'border-green-500/60' : 'border-red-500/50'
+                            const bgCls = !finished ? 'bg-gradient-to-r from-purple-600/20 via-purple-500/10 to-blue-500/10' : iWon ? 'bg-green-500/10' : 'bg-red-500/10'
+                            const tagCls = !finished ? 'text-purple-300' : iWon ? 'text-green-300' : 'text-red-300'
+                            return (
+                              <div key={m.id} className={`relative overflow-hidden rounded-xl border-2 p-3 ${borderCls} ${bgCls}`}>
+                                <div className={`absolute top-1.5 right-2 text-[9px] font-black uppercase tracking-wider ${tagCls}`}>{tag}</div>
+                                <div className="flex items-center gap-2 text-sm pt-2.5 flex-wrap">
+                                  {side(p1, m.player1Id, iAmSide1)}
+                                  <span className="text-yellow-400 font-black text-xs">VS</span>
+                                  {side(p2, m.player2Id, iAmSide2)}
+                                  {status}
+                                </div>
                               </div>
-                            </div>
-                          )
+                            )
+                          }
                           return (
                             <div key={m.id} className="flex items-center gap-2 text-sm p-2.5 rounded-lg bg-muted/20">
-                              {side(p1, m.player1Id)}
+                              {side(p1, m.player1Id, false)}
                               <span className="text-muted-foreground text-xs">vs</span>
-                              {side(p2, m.player2Id)}
+                              {side(p2, m.player2Id, false)}
                               {status}
                             </div>
                           )
