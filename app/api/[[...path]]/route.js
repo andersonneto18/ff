@@ -944,14 +944,11 @@ async function handleRoute(request, { params }) {
         return J({ ok: true })
       }
 
-      // Helper: does userId belong to this duel — as one of the two registered entrants, or as
-      // the accepted duo partner of either? Used to gate both the pre-match chat and its read access.
-      async function canAccessMatch(match, userId) {
-        if (match.player1Id === userId || match.player2Id === userId) return true
-        const asPartner = await db.collection('tournament_participants').findOne({
-          tournamentId: tId, partnerId: userId, partnerStatus: 'ACEITE', userId: { $in: [match.player1Id, match.player2Id] },
-        })
-        return !!asPartner
+      // Chat and win/loss claims are both restricted to the two registered (paying) entrants —
+      // a duo partner never gets their own account into tournament_matches, so this is naturally
+      // just player1Id/player2Id, same rule as the claim endpoint below.
+      function canAccessMatch(match, userId) {
+        return match.player1Id === userId || match.player2Id === userId
       }
 
       const matchBeginMatch = tAction?.match(/^match\/([^\/]+)\/begin$/)
@@ -976,7 +973,7 @@ async function handleRoute(request, { params }) {
         const matchId = matchMessagesMatch[1]
         const match = await db.collection('tournament_matches').findOne({ id: matchId, tournamentId: tId })
         if (!match) return ERR('Partida não encontrada', 404)
-        if (!(await canAccessMatch(match, user.id))) return ERR('Não tens acesso a esta partida', 403)
+        if (!canAccessMatch(match, user.id)) return ERR('Não tens acesso a esta partida', 403)
         if (method === 'GET') {
           const msgs = await db.collection('tournament_match_messages').find({ matchId }).sort({ createdAt: 1 }).limit(200).toArray()
           return J({ messages: msgs.map(clean) })
