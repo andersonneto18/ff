@@ -763,7 +763,10 @@ async function handleRoute(request, { params }) {
     // ===== TOURNAMENTS =====
     if (route === '/tournaments' && method === 'GET') {
       const user = await getUserFromRequest(request)
-      const list = await db.collection('tournaments').find({ status: { $in: ['ABERTO', 'EM_ANDAMENTO'] } }).sort({ createdAt: -1 }).limit(20).toArray()
+      // Includes recently FINALIZADO too — otherwise a tournament vanishes from the list the moment
+      // it ends and nobody ever sees the champion screen. Capped by the same limit(20), so old
+      // finished ones still age out naturally as new tournaments get created.
+      const list = await db.collection('tournaments').find({ status: { $in: ['ABERTO', 'EM_ANDAMENTO', 'FINALIZADO'] } }).sort({ createdAt: -1 }).limit(20).toArray()
       const tIds = list.map(t => t.id)
       // currentPlayers/maxPlayers count entries (duos), not heads — totalPlayers is the real headcount
       // (entry + accepted partner) so "Duplas 4/8" can also show "8 jogadores no total" alongside it.
