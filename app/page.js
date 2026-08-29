@@ -1754,6 +1754,7 @@ function TournamentsView({ me }) {
         {list.map(t => {
           const st = STATUS_LABEL[t.status] || { l: t.status, cls: '' }
           const isJoined = t.isJoined || (selected === t.id && details?.participants?.some(p => p.userId === me?.id))
+          const partnerOfInviter = t.partnerOfInviter || (selected === t.id && details?.participants?.find(p => p.partnerId === me?.id && p.partnerStatus === 'ACEITE')?.user)
           const totalPot = (t.entryFeeCents * t.maxPlayers) / 100
           const prize2 = (t.entryFeeCents / 100).toFixed(2)
           const prize1 = (totalPot * 0.8 - parseFloat(prize2)).toFixed(2)
@@ -1796,7 +1797,7 @@ function TournamentsView({ me }) {
               )}
 
               <div className="flex gap-2 flex-wrap">
-                {t.status === 'ABERTO' && !isJoined && (
+                {t.status === 'ABERTO' && !isJoined && !partnerOfInviter && (
                   <Button disabled={busy} onClick={() => join(t)} className="bg-gradient-to-r from-yellow-500 to-orange-500 text-black font-bold">
                     <Trophy className="w-4 h-4 mr-2" /> Inscrever {t.entryFeeCents > 0 ? `(${(t.entryFeeCents/100).toFixed(2)}€)` : '(Grátis)'}
                   </Button>
@@ -1809,6 +1810,17 @@ function TournamentsView({ me }) {
                     </Button>
                   </div>
                 )}
+                {!isJoined && partnerOfInviter && t.status === 'ABERTO' && (
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <Badge className="bg-purple-500/20 text-purple-300">🤝 Vais jogar como dupla de {partnerOfInviter.ffNickname || partnerOfInviter.name}</Badge>
+                    <Button variant="outline" size="sm" disabled={busy} onClick={() => respondInvite(t.id, false)} className="border-red-500/40 text-red-400 hover:bg-red-500/10 h-7 text-xs">
+                      Sair da Dupla
+                    </Button>
+                  </div>
+                )}
+                {!isJoined && partnerOfInviter && t.status === 'EM_ANDAMENTO' && (
+                  <Badge className="bg-purple-500/20 text-purple-300">🤝 Estás a jogar como dupla de {partnerOfInviter.ffNickname || partnerOfInviter.name}</Badge>
+                )}
                 <Button variant="outline" size="sm" onClick={() => { setSelected(selected === t.id ? null : t.id); if (selected !== t.id) loadDetails(t.id) }} className="border-purple-500/40">
                   {selected === t.id ? 'Fechar' : 'Ver bracket'}
                 </Button>
@@ -1818,7 +1830,22 @@ function TournamentsView({ me }) {
                 <div className="mt-4 pt-4 border-t border-purple-500/20 space-y-4">
                   {(() => {
                     const myParticipant = details.participants?.find(p => p.userId === me?.id)
-                    if (!myParticipant) return null
+                    if (!myParticipant) {
+                      const asPartner = details.participants?.find(p => p.partnerId === me?.id && p.partnerStatus === 'ACEITE')
+                      if (!asPartner) return null
+                      return (
+                        <div className="bg-purple-500/10 border border-purple-500/30 rounded-lg p-3 space-y-2">
+                          <div className="text-xs font-bold text-purple-300 uppercase tracking-wider">🤝 A tua dupla</div>
+                          <div className="flex items-center justify-between gap-2 flex-wrap">
+                            <div className="flex items-center gap-2 text-sm">
+                              <Avatar className="w-7 h-7"><AvatarImage src={asPartner.user?.photoUrl} /><AvatarFallback>{asPartner.user?.ffNickname?.[0]}</AvatarFallback></Avatar>
+                              <span>Vais jogar com <span className="text-white font-medium">{asPartner.user?.ffNickname || asPartner.user?.name}</span>, que fez a inscrição.</span>
+                            </div>
+                            {t.status === 'ABERTO' && <Button size="sm" variant="outline" disabled={busy} onClick={() => respondInvite(t.id, false)} className="border-red-500/40 text-red-400 h-7 text-xs">Sair da Dupla</Button>}
+                          </div>
+                        </div>
+                      )
+                    }
                     return (
                       <div className="bg-zinc-800/50 border border-zinc-700/60 rounded-lg p-3 space-y-2">
                         <div className="text-xs font-bold text-purple-300 uppercase tracking-wider">👥 A tua dupla</div>
