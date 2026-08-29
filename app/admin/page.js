@@ -7,12 +7,15 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { Switch } from '@/components/ui/switch'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogFooter, AlertDialogTitle, AlertDialogDescription, AlertDialogAction, AlertDialogCancel } from '@/components/ui/alert-dialog'
 import { Shield, LayoutDashboard, Gamepad2, AlertTriangle, Users, LogOut, Flame, Coins, Activity, CheckCircle2, XCircle, Ban, ShieldCheck, Crown, Wallet as WalletIcon, Image as ImageIcon, Video, Scale, MessageSquare, Landmark, ClipboardList, TrendingUp, ArrowDownLeft, ArrowUpRight, CreditCard, Smartphone, Copy, Send, Sparkles } from 'lucide-react'
 
 const fmt = (cents) => `${((cents || 0) / 100).toFixed(2)}€`
+const CONFRONTO_PRESET = 'Ativos: Alok / Kamir\nPassivos: Kelly | Moco | Maxim | Leon | Hayato'
+const PETS_PRESET = 'Babuíno | Falcão | Mestre Tigre | Patinho | Dom Pisante'
 
 function api(path, opts = {}) {
   const token = typeof window !== 'undefined' ? localStorage.getItem('ff_admin_token') : null
@@ -1327,11 +1330,23 @@ function TournamentsSection() {
                 </select>
               </div>
               <div className="sm:col-span-2">
-                <Label className="text-zinc-300">🧬 Habilidades de Personagens (opcional)</Label>
+                <div className="flex items-center justify-between">
+                  <Label className="text-zinc-300">🧬 Habilidades de Personagens (opcional)</Label>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-zinc-500">Auto-preencher</span>
+                    <Switch checked={form.characters === CONFRONTO_PRESET} onCheckedChange={(v) => setForm({ ...form, characters: v ? CONFRONTO_PRESET : '' })} />
+                  </div>
+                </div>
                 <textarea value={form.characters} onChange={e => setForm({...form, characters: e.target.value})} rows={2} placeholder="ex: Sem Chrono, K permitido, proibido Alok..." className="w-full mt-1 bg-zinc-800 border border-zinc-700 text-white rounded-md px-3 py-2 text-sm focus:outline-none focus:border-purple-500 resize-none" />
               </div>
               <div className="sm:col-span-2">
-                <Label className="text-zinc-300">🐾 Tipo de Pet (opcional)</Label>
+                <div className="flex items-center justify-between">
+                  <Label className="text-zinc-300">🐾 Tipo de Pet (opcional)</Label>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-zinc-500">Auto-preencher</span>
+                    <Switch checked={form.pets === PETS_PRESET} onCheckedChange={(v) => setForm({ ...form, pets: v ? PETS_PRESET : '' })} />
+                  </div>
+                </div>
                 <textarea value={form.pets} onChange={e => setForm({...form, pets: e.target.value})} rows={2} placeholder="ex: Sem pets, Falco permitido, proibido Beaston..." className="w-full mt-1 bg-zinc-800 border border-zinc-700 text-white rounded-md px-3 py-2 text-sm focus:outline-none focus:border-purple-500 resize-none" />
               </div>
               <div className="sm:col-span-2">
