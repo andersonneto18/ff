@@ -1613,6 +1613,9 @@ function TournamentsView({ me }) {
   const [inviteModal, setInviteModal] = useState(null)
   const [partnerEmailDrafts, setPartnerEmailDrafts] = useState({})
   const [chatMatchId, setChatMatchId] = useState(null)
+  const [commissionPercent, setCommissionPercent] = useState(20)
+
+  useEffect(() => { fetch('/api/platform-status').then(r => r.json()).then(s => { if (s.commissionPercent) setCommissionPercent(s.commissionPercent) }).catch(() => {}) }, [])
 
   const load = useCallback(async () => {
     try { const d = await api('/tournaments'); setList(d.tournaments || []) } catch (e) {}
@@ -1765,8 +1768,9 @@ function TournamentsView({ me }) {
           const isJoined = t.isJoined || (selected === t.id && details?.participants?.some(p => p.userId === me?.id))
           const partnerOfInviter = t.partnerOfInviter || (selected === t.id && details?.participants?.find(p => p.partnerId === me?.id && p.partnerStatus === 'ACEITE')?.user)
           const totalPot = (t.entryFeeCents * t.maxPlayers) / 100
-          const prize2 = (t.entryFeeCents / 100).toFixed(2)
-          const prize1 = (totalPot * 0.8 - parseFloat(prize2)).toFixed(2)
+          // Winner takes all — once the tournament has actually started, use the real computed
+          // prize instead of this pre-start estimate (which assumes the standard commission rate).
+          const prize1 = t.prizeFirstCents != null ? (t.prizeFirstCents / 100).toFixed(2) : (totalPot * (1 - commissionPercent / 100)).toFixed(2)
 
           return (
             <Card key={t.id} className="glow-card border-purple-500/20 p-5">
@@ -1787,10 +1791,9 @@ function TournamentsView({ me }) {
                 </div>
               </div>
 
-              <div className="grid grid-cols-3 gap-2 mb-3 text-center">
+              <div className="grid grid-cols-2 gap-2 mb-3 text-center">
                 <div className="glow-card rounded-lg p-2"><div className="text-xs text-muted-foreground">Duplas</div><div className="font-bold">{t.currentPlayers}/{t.maxPlayers}</div></div>
-                <div className="glow-card rounded-lg p-2"><div className="text-xs text-muted-foreground">1º Lugar</div><div className="font-bold text-yellow-300">{prize1}€</div></div>
-                <div className="glow-card rounded-lg p-2"><div className="text-xs text-muted-foreground">2º Lugar</div><div className="font-bold text-zinc-300">{prize2}€</div></div>
+                <div className="glow-card rounded-lg p-2"><div className="text-xs text-muted-foreground">🏆 Vencedor leva tudo</div><div className="font-bold text-yellow-300">{prize1}€</div></div>
               </div>
               {t.totalPlayers > 0 && <div className="text-xs text-muted-foreground text-center -mt-2 mb-3">👥 {t.totalPlayers} jogadores no total</div>}
 
@@ -2104,9 +2107,15 @@ function TournamentsView({ me }) {
                     if (amSecond || amSecondPartner) return (
                       <div className="relative overflow-hidden rounded-2xl border-2 border-zinc-400/50 bg-gradient-to-b from-zinc-400/15 via-zinc-500/10 to-zinc-900/60 p-5 text-center">
                         <div className="text-4xl mb-1">🥈</div>
-                        <div className="font-black text-zinc-200 text-lg">{amSecond ? 'Ficaste em 2º Lugar!' : 'A tua dupla ficou em 2º lugar!'}</div>
-                        <div className="text-3xl font-black text-white mt-2">+{prize2}</div>
-                        {amSecondPartner && <div className="text-xs text-zinc-400 mt-1">Prémio creditado a {details.umap?.[secondId]?.ffNickname}</div>}
+                        <div className="font-black text-zinc-200 text-lg">{amSecond ? 'Perdeste a final' : 'A tua dupla perdeu a final'}</div>
+                        {details.tournament.prizeSecondCents > 0 ? (
+                          <>
+                            <div className="text-3xl font-black text-white mt-2">+{prize2}</div>
+                            {amSecondPartner && <div className="text-xs text-zinc-400 mt-1">Prémio creditado a {details.umap?.[secondId]?.ffNickname}</div>}
+                          </>
+                        ) : (
+                          <div className="text-sm text-zinc-400 mt-2">🏆 Vencedor leva tudo — sem prémio de 2º lugar</div>
+                        )}
                         <div className="text-xs text-yellow-400 mt-2">🏆 Campeão: {details.umap?.[winnerId]?.ffNickname}</div>
                       </div>
                     )
@@ -2280,12 +2289,15 @@ function TournamentInviteModal({ invite, onClose, onDone }) {
   const api = useApi()
   const [details, setDetails] = useState(null)
   const [busy, setBusy] = useState(false)
+  const [commissionPercent, setCommissionPercent] = useState(20)
 
   useEffect(() => {
     setDetails(null)
     if (!invite) return
     api(`/tournaments/${invite.tournamentId}`).then(setDetails).catch(() => {})
   }, [invite, api])
+
+  useEffect(() => { fetch('/api/platform-status').then(r => r.json()).then(s => { if (s.commissionPercent) setCommissionPercent(s.commissionPercent) }).catch(() => {}) }, [])
 
   const respond = async (accept) => {
     setBusy(true)
@@ -2300,8 +2312,7 @@ function TournamentInviteModal({ invite, onClose, onDone }) {
   if (!invite) return null
   const t = details?.tournament
   const totalPot = t ? (t.entryFeeCents * t.maxPlayers) / 100 : 0
-  const prize2 = t ? (t.entryFeeCents / 100).toFixed(2) : '0.00'
-  const prize1 = t ? (totalPot * 0.8 - parseFloat(prize2)).toFixed(2) : '0.00'
+  const prize1 = t ? (t.prizeFirstCents != null ? (t.prizeFirstCents / 100).toFixed(2) : (totalPot * (1 - commissionPercent / 100)).toFixed(2)) : '0.00'
 
   return (
     <Dialog open={!!invite} onOpenChange={(v) => !v && onClose()}>
@@ -2326,10 +2337,9 @@ function TournamentInviteModal({ invite, onClose, onDone }) {
               </div>
               {t.description && <p className="text-sm text-muted-foreground">{t.description}</p>}
             </div>
-            <div className="grid grid-cols-3 gap-2 text-center">
+            <div className="grid grid-cols-2 gap-2 text-center">
               <div className="glow-card rounded-lg p-2"><div className="text-xs text-muted-foreground">Duplas</div><div className="font-bold">{t.currentPlayers}/{t.maxPlayers}</div></div>
-              <div className="glow-card rounded-lg p-2"><div className="text-xs text-muted-foreground">1º Lugar</div><div className="font-bold text-yellow-300">{prize1}€</div></div>
-              <div className="glow-card rounded-lg p-2"><div className="text-xs text-muted-foreground">2º Lugar</div><div className="font-bold text-zinc-300">{prize2}€</div></div>
+              <div className="glow-card rounded-lg p-2"><div className="text-xs text-muted-foreground">🏆 Vencedor leva tudo</div><div className="font-bold text-yellow-300">{prize1}€</div></div>
             </div>
             {t.totalPlayers > 0 && <div className="text-xs text-muted-foreground text-center">👥 {t.totalPlayers} jogadores no total</div>}
             {(t.mode || t.server || t.weapons || t.platform || t.characters || t.pets || t.rules) && (
@@ -2440,10 +2450,11 @@ function Dashboard({ me, onLogout, refreshMe }) {
   const [stripeEnabled, setStripeEnabled] = useState(false)
   const [bonusEnabled, setBonusEnabled] = useState(false)
   const [topupsEnabled, setTopupsEnabled] = useState(true)
+  const [commissionPercent, setCommissionPercent] = useState(20)
   const api = useApi()
 
   useEffect(() => {
-    const load = () => fetch('/api/platform-status').then(r => r.json()).then(d => { setStripeEnabled(d.stripeEnabled); setBonusEnabled(d.bonusEnabled || false); setTopupsEnabled(d.topupsEnabled !== false) }).catch(() => {})
+    const load = () => fetch('/api/platform-status').then(r => r.json()).then(d => { setStripeEnabled(d.stripeEnabled); setBonusEnabled(d.bonusEnabled || false); setTopupsEnabled(d.topupsEnabled !== false); if (d.commissionPercent) setCommissionPercent(d.commissionPercent) }).catch(() => {})
     load()
     const i = setInterval(load, 30000)
     return () => clearInterval(i)
@@ -2544,8 +2555,7 @@ function Dashboard({ me, onLogout, refreshMe }) {
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {arenaTourn.map(t => {
                   const totalPot = (t.entryFeeCents * t.maxPlayers) / 100
-                  const prize2Arena = (t.entryFeeCents / 100).toFixed(2)
-                  const prize1 = (totalPot * 0.8 - parseFloat(prize2Arena)).toFixed(2)
+                  const prize1 = t.prizeFirstCents != null ? (t.prizeFirstCents / 100).toFixed(2) : (totalPot * (1 - commissionPercent / 100)).toFixed(2)
                   const isOpen = t.status === 'ABERTO'
                   return (
                     <Card key={t.id} className="glow-card border-yellow-500/30 p-4 cursor-pointer hover:scale-[1.01] transition" onClick={() => setViewClean('tournaments')}>
@@ -2567,7 +2577,7 @@ function Dashboard({ me, onLogout, refreshMe }) {
                       </div>
                       <div className="grid grid-cols-3 gap-2 text-center text-xs mt-2">
                         <div className="glow-card rounded p-1.5"><div className="text-muted-foreground">Duplas</div><div className="font-bold">{t.currentPlayers}/{t.maxPlayers}</div></div>
-                        <div className="glow-card rounded p-1.5"><div className="text-muted-foreground">1º Lugar</div><div className="font-bold text-yellow-300">{prize1}€</div></div>
+                        <div className="glow-card rounded p-1.5"><div className="text-muted-foreground">🏆 Vencedor</div><div className="font-bold text-yellow-300">{prize1}€</div></div>
                         <div className="glow-card rounded p-1.5"><div className="text-muted-foreground">Servidor</div><div className="font-bold">{t.server || '-'}</div></div>
                       </div>
                     </Card>

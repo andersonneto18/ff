@@ -1964,7 +1964,8 @@ async function startTournamentBracket(db, tournament) {
   const feesEnabled = feesSetting?.value !== '0'
   const commission = feesEnabled ? Math.round(totalPot * COMMISSION) : 0
   const net = totalPot - commission
-  const prizeSecond = Math.round(net * 0.35)
+  // Winner takes all — no runner-up prize
+  const prizeSecond = 0
   const prizeFirst = net - prizeSecond
   await db.collection('tournaments').updateOne({ id: tournament.id }, { $set: { status: 'EM_ANDAMENTO', currentRound: 1, startedAt: new Date(), prizeFirstCents: prizeFirst, prizeSecondCents: prizeSecond, commissionCents: commission } })
   await generateRoundMatches(db, tournament.id, shuffled.map(p => p.userId), 1, tournament.name)

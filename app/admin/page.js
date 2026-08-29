@@ -1384,13 +1384,12 @@ function TournamentsSection() {
               const totalPot = form.maxPlayers * form.entryFeeEuros
               const commissionCut = feesEnabled ? commissionPercent / 100 : 0
               const net = totalPot * (1 - commissionCut)
-              const prize2 = net * 0.35
-              const prize1 = net - prize2
+              // Winner takes all — no runner-up prize
+              const prize1 = net
               return (
                 <div className="text-xs text-zinc-400 bg-zinc-800/60 rounded p-3">
                   Pote total ({form.maxPlayers} duplas × {form.entryFeeEuros}€): <b className="text-white">{totalPot.toFixed(2)}€</b> →
-                  1º: <b className="text-yellow-300">{prize1.toFixed(2)}€</b> ·
-                  2º: <b className="text-zinc-300">{prize2.toFixed(2)}€</b> ·
+                  🏆 Vencedor leva tudo: <b className="text-yellow-300">{prize1.toFixed(2)}€</b> ·
                   Plataforma: <b className="text-purple-300">{(totalPot - net).toFixed(2)}€</b>
                   {!feesEnabled && <span className="text-yellow-400 ml-1">(taxas desativadas)</span>}
                 </div>
