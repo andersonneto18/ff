@@ -2133,6 +2133,7 @@ function Dashboard({ me, onLogout, refreshMe }) {
   const [rooms, setRooms] = useState([])
   const [myRooms, setMyRooms] = useState([])
   const [arenaTourn, setArenaTourn] = useState([])
+  const [tournInvites, setTournInvites] = useState([])
   const [openRoom, setOpenRoom] = useState(sp.get('id') || null)
   const [createOpen, setCreateOpen] = useState(false)
   const [stripeEnabled, setStripeEnabled] = useState(false)
@@ -2154,9 +2155,10 @@ function Dashboard({ me, onLogout, refreshMe }) {
 
   const load = useCallback(async () => {
     try {
-      const [r, mr, tr] = await Promise.all([api('/rooms'), api('/rooms/mine'), api('/tournaments')])
+      const [r, mr, tr, inv] = await Promise.all([api('/rooms'), api('/rooms/mine'), api('/tournaments'), api('/tournaments/invites').catch(() => ({ invites: [] }))])
       setRooms(r.rooms)
       setArenaTourn((tr.tournaments || []).filter(t => t.status === 'ABERTO' || t.status === 'EM_ANDAMENTO'))
+      setTournInvites(inv.invites || [])
       // Detect transitions: ABERTA → EMPARELHADA on rooms I created
       setMyRooms(prev => {
         for (const newR of mr.rooms) {
@@ -2172,6 +2174,14 @@ function Dashboard({ me, onLogout, refreshMe }) {
   useEffect(() => { load(); const i = setInterval(load, 5000); return () => clearInterval(i) }, [load])
 
   const setViewClean = (v) => { setView(v); setOpenRoom(null); router.replace('/?view=' + v) }
+
+  const respondTournInvite = async (tournamentId, accept) => {
+    try {
+      await api(`/tournaments/${tournamentId}/partner-response`, { method: 'POST', body: JSON.stringify({ accept }) })
+      toast.success(accept ? 'Convite aceite!' : 'Convite recusado')
+      load()
+    } catch (e) { toast.error(e.message) }
+  }
 
   if (openRoom) return (
     <Shell me={me} onLogout={onLogout} view={view} setView={setViewClean}>
@@ -2192,6 +2202,26 @@ function Dashboard({ me, onLogout, refreshMe }) {
             </div>
             <Button onClick={() => setCreateOpen(true)} className="bg-gradient-to-r from-purple-600 to-blue-500 h-11"><Plus className="w-4 h-4 mr-2" />Criar Sala</Button>
           </div>
+
+          {/* Tournament duo-partner invites */}
+          {tournInvites.length > 0 && (
+            <div className="space-y-2">
+              {tournInvites.map(inv => (
+                <Card key={inv.tournamentId} className="glow-card border-yellow-500/40 p-4 flex items-center justify-between gap-3 flex-wrap">
+                  <div className="flex items-center gap-2">
+                    <Avatar className="w-9 h-9"><AvatarImage src={inv.inviter?.photoUrl} /><AvatarFallback>{inv.inviter?.ffNickname?.[0]}</AvatarFallback></Avatar>
+                    <div className="text-sm">
+                      <b>{inv.inviter?.name}</b> convidou-te para jogares como dupla em <b>{inv.tournamentName}</b>
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button size="sm" onClick={() => respondTournInvite(inv.tournamentId, true)} className="bg-green-600 hover:bg-green-700">Aceitar</Button>
+                    <Button size="sm" variant="outline" onClick={() => respondTournInvite(inv.tournamentId, false)} className="border-red-500/40 text-red-400">Recusar</Button>
+                  </div>
+                </Card>
+              ))}
+            </div>
+          )}
 
           {/* Promotional banner */}
           {bonusEnabled && (
