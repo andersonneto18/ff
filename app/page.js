@@ -1659,8 +1659,8 @@ function TournamentsView({ me }) {
     setBusy(true)
     try {
       await api(`/tournaments/${t.id}/join`, { method: 'POST', body: '{}' })
-      toast.success(`Inscrito no torneio "${t.name}"!`)
-      load(); if (selected === t.id) loadDetails(t.id)
+      toast.success(`Inscrito no torneio "${t.name}"! Já podes convidar um amigo para a tua dupla.`)
+      load(); setSelected(t.id); loadDetails(t.id)
     } catch (e) { toast.error(e.message) } finally { setBusy(false) }
   }
 
