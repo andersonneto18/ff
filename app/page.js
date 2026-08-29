@@ -1764,6 +1764,9 @@ function TournamentsView({ me }) {
                   <div className="flex items-center gap-2 flex-wrap">
                     <h3 className="font-black text-lg">{t.name}</h3>
                     <Badge variant="outline" className={`${st.cls} border-0 text-xs`}>{st.l}</Badge>
+                    {t.status === 'ABERTO' && t.currentPlayers >= t.maxPlayers && (
+                      <Badge className="bg-yellow-500/20 text-yellow-300 border border-yellow-500/40 text-xs font-black">🔥 Torneio Completo</Badge>
+                    )}
                   </div>
                   {t.description && <p className="text-sm text-muted-foreground mt-0.5">{t.description}</p>}
                 </div>
@@ -2197,7 +2200,12 @@ function TournamentInviteModal({ invite, onClose, onDone }) {
               <div className="text-sm"><b>{invite.inviter?.name}</b> convidou-te para jogares como dupla</div>
             </div>
             <div>
-              <h3 className="font-black text-lg">{t.name}</h3>
+              <div className="flex items-center gap-2 flex-wrap">
+                <h3 className="font-black text-lg">{t.name}</h3>
+                {t.status === 'ABERTO' && t.currentPlayers >= t.maxPlayers && (
+                  <Badge className="bg-yellow-500/20 text-yellow-300 border border-yellow-500/40 text-xs font-black">🔥 Torneio Completo</Badge>
+                )}
+              </div>
               {t.description && <p className="text-sm text-muted-foreground">{t.description}</p>}
             </div>
             <div className="grid grid-cols-3 gap-2 text-center">
@@ -2373,6 +2381,9 @@ function Dashboard({ me, onLogout, refreshMe }) {
                           <div className="flex items-center gap-2 flex-wrap">
                             <span className="font-black text-base">{t.name}</span>
                             <Badge variant="outline" className={`text-xs border-0 ${isOpen ? 'bg-green-500/15 text-green-300' : 'bg-purple-500/15 text-purple-300'}`}>{isOpen ? 'Aberto' : 'Em andamento'}</Badge>
+                            {isOpen && t.currentPlayers >= t.maxPlayers && (
+                              <Badge className="bg-yellow-500/20 text-yellow-300 border border-yellow-500/40 text-xs font-black">🔥 Completo</Badge>
+                            )}
                           </div>
                           {(t.mode || t.platform) && <div className="text-xs text-muted-foreground mt-0.5">{[t.mode, t.platform].filter(Boolean).join(' · ')}</div>}
                         </div>
