@@ -2017,15 +2017,35 @@ function TournamentsView({ me }) {
                         {(details.matches || []).filter(m => m.round === round).map(m => {
                           const p1 = details.umap?.[m.player1Id]; const p2 = details.umap?.[m.player2Id]
                           const isMine = m.player1Id === me?.id || m.player2Id === me?.id
+                          const side = (u, id) => (
+                            <span className={id === me?.id ? 'text-purple-200 font-black' : (m.winnerId === id ? 'font-bold text-green-300' : m.winnerId ? 'text-muted-foreground line-through' : '')}>
+                              {id === me?.id ? 'EU' : (u?.ffNickname || '?')}
+                              {details.partnerMap?.[id] && <span className={id === me?.id ? 'text-purple-300/80 font-bold' : 'text-zinc-400 font-normal'}> + {details.partnerMap[id].ffNickname}</span>}
+                            </span>
+                          )
+                          const status = (
+                            <span className="ml-auto text-xs shrink-0">
+                              {m.status === 'FINALIZADA' && <span className="text-green-400">✓</span>}
+                              {m.status === 'EM_CONFLITO' && <span className="text-orange-300">⚠</span>}
+                            </span>
+                          )
+                          if (isMine) return (
+                            <div key={m.id} className="relative overflow-hidden rounded-xl border-2 border-purple-500/60 bg-gradient-to-r from-purple-600/20 via-purple-500/10 to-blue-500/10 p-3 shadow-[0_0_20px_-8px_rgba(168,85,247,0.6)]">
+                              <div className="absolute top-1.5 right-2 text-[9px] font-black text-purple-300 uppercase tracking-wider">⭐ O teu duelo</div>
+                              <div className="flex items-center gap-2 text-sm pt-2.5 flex-wrap">
+                                {side(p1, m.player1Id)}
+                                <span className="text-yellow-400 font-black text-xs">VS</span>
+                                {side(p2, m.player2Id)}
+                                {status}
+                              </div>
+                            </div>
+                          )
                           return (
-                            <div key={m.id} className={`flex items-center gap-2 text-sm p-2.5 rounded-lg ${isMine ? 'bg-purple-500/15 border border-purple-500/30' : 'bg-muted/20'}`}>
-                              <span className={m.winnerId === m.player1Id ? 'font-bold text-green-300' : m.winnerId ? 'text-muted-foreground line-through' : ''}>{p1?.ffNickname || '?'}{details.partnerMap?.[m.player1Id] && ` + ${details.partnerMap[m.player1Id].ffNickname}`}</span>
+                            <div key={m.id} className="flex items-center gap-2 text-sm p-2.5 rounded-lg bg-muted/20">
+                              {side(p1, m.player1Id)}
                               <span className="text-muted-foreground text-xs">vs</span>
-                              <span className={m.winnerId === m.player2Id ? 'font-bold text-green-300' : m.winnerId ? 'text-muted-foreground line-through' : ''}>{p2?.ffNickname || '?'}{details.partnerMap?.[m.player2Id] && ` + ${details.partnerMap[m.player2Id].ffNickname}`}</span>
-                              <span className="ml-auto text-xs">
-                                {m.status === 'FINALIZADA' && <span className="text-green-400">✓</span>}
-                                {m.status === 'EM_CONFLITO' && <span className="text-orange-300">⚠</span>}
-                              </span>
+                              {side(p2, m.player2Id)}
+                              {status}
                             </div>
                           )
                         })}
