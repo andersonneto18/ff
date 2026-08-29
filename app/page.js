@@ -2081,12 +2081,42 @@ function TournamentsView({ me }) {
                     </div>
                   )})}
 
-                  {t.status === 'FINALIZADO' && details.tournament?.winnerId && (
-                    <div className="text-center py-2">
-                      <div className="text-2xl mb-1">🏆</div>
-                      <div className="font-black text-yellow-300">Campeão: {details.umap?.[details.tournament.winnerId]?.ffNickname}</div>
-                    </div>
-                  )}
+                  {t.status === 'FINALIZADO' && details.tournament?.winnerId && (() => {
+                    const finalRound = Math.max(...(details.matches || []).map(m => m.round))
+                    const finalMatch = (details.matches || []).find(m => m.round === finalRound)
+                    const winnerId = details.tournament.winnerId
+                    const secondId = finalMatch ? (finalMatch.winnerId === finalMatch.player1Id ? finalMatch.player2Id : finalMatch.player1Id) : null
+                    const prize1 = fmt(details.tournament.prizeFirstCents)
+                    const prize2 = fmt(details.tournament.prizeSecondCents)
+                    const amWinner = me?.id === winnerId
+                    const amSecond = me?.id === secondId
+                    const amWinnerPartner = details.partnerMap?.[winnerId]?.id === me?.id
+                    const amSecondPartner = details.partnerMap?.[secondId]?.id === me?.id
+
+                    if (amWinner || amWinnerPartner) return (
+                      <div className="relative overflow-hidden rounded-2xl border-2 border-yellow-500/60 bg-gradient-to-b from-yellow-500/20 via-amber-500/10 to-zinc-900/60 p-5 text-center shadow-[0_0_30px_-10px_rgba(234,179,8,0.7)]">
+                        <div className="text-4xl mb-1">🏆</div>
+                        <div className="font-black text-yellow-300 text-lg">{amWinner ? 'És o Campeão!' : 'A tua dupla venceu o torneio!'}</div>
+                        <div className="text-3xl font-black text-white mt-2">+{prize1}</div>
+                        {amWinnerPartner && <div className="text-xs text-zinc-400 mt-1">Prémio creditado a {details.umap?.[winnerId]?.ffNickname}</div>}
+                      </div>
+                    )
+                    if (amSecond || amSecondPartner) return (
+                      <div className="relative overflow-hidden rounded-2xl border-2 border-zinc-400/50 bg-gradient-to-b from-zinc-400/15 via-zinc-500/10 to-zinc-900/60 p-5 text-center">
+                        <div className="text-4xl mb-1">🥈</div>
+                        <div className="font-black text-zinc-200 text-lg">{amSecond ? 'Ficaste em 2º Lugar!' : 'A tua dupla ficou em 2º lugar!'}</div>
+                        <div className="text-3xl font-black text-white mt-2">+{prize2}</div>
+                        {amSecondPartner && <div className="text-xs text-zinc-400 mt-1">Prémio creditado a {details.umap?.[secondId]?.ffNickname}</div>}
+                        <div className="text-xs text-yellow-400 mt-2">🏆 Campeão: {details.umap?.[winnerId]?.ffNickname}</div>
+                      </div>
+                    )
+                    return (
+                      <div className="text-center py-2">
+                        <div className="text-2xl mb-1">🏆</div>
+                        <div className="font-black text-yellow-300">Campeão: {details.umap?.[winnerId]?.ffNickname}</div>
+                      </div>
+                    )
+                  })()}
                 </div>
               )}
             </Card>

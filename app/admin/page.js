@@ -1249,12 +1249,24 @@ function TournamentsSection() {
   const [busy, setBusy] = useState(false)
   const [selected, setSelected] = useState(null)
   const [details, setDetails] = useState(null)
+  const [feesEnabled, setFeesEnabled] = useState(true)
+  const [feesBusy, setFeesBusy] = useState(false)
 
   const load = useCallback(async () => {
     try { const d = await api('/admin/tournaments'); setList(d.tournaments || []) } catch (e) {}
   }, [])
 
   useEffect(() => { load(); const i = setInterval(load, 6000); return () => clearInterval(i) }, [load])
+  useEffect(() => { api('/admin/settings').then(s => setFeesEnabled(s.tournamentFeesEnabled !== false)).catch(() => {}) }, [])
+
+  const toggleFees = async () => {
+    setFeesBusy(true)
+    try {
+      const res = await api('/admin/settings', { method: 'POST', body: JSON.stringify({ tournamentFeesEnabled: !feesEnabled }) })
+      setFeesEnabled(res.tournamentFeesEnabled)
+      toast.success(res.tournamentFeesEnabled ? 'Taxas de torneio ativadas' : 'Taxas de torneio desativadas — jogadores ganham o valor bruto')
+    } catch (e) { toast.error(e.message) } finally { setFeesBusy(false) }
+  }
 
   const loadDetails = useCallback(async (id) => {
     try { const d = await api(`/tournaments/${id}`); setDetails(d) } catch (e) {}
@@ -1304,8 +1316,19 @@ function TournamentsSection() {
     <div className="space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <h1 className="text-3xl font-bold text-white">Torneios</h1>
-        <Button onClick={() => setCreating(true)} className="bg-gradient-to-r from-purple-600 to-blue-500">+ Criar Torneio</Button>
+        <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex items-center gap-2 bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-1.5">
+            <span className="text-xs text-zinc-400">Taxas de torneio {feesEnabled ? '(ativas)' : '(desativadas)'}</span>
+            <Switch checked={feesEnabled} disabled={feesBusy} onCheckedChange={toggleFees} />
+          </div>
+          <Button onClick={() => setCreating(true)} className="bg-gradient-to-r from-purple-600 to-blue-500">+ Criar Torneio</Button>
+        </div>
       </div>
+      {!feesEnabled && (
+        <div className="text-xs text-yellow-300 bg-yellow-500/10 border border-yellow-500/30 rounded-lg px-3 py-2">
+          ⚠️ Taxas desativadas — os próximos torneios a arrancar não cobram comissão da plataforma. Os jogadores dividem o valor total (bruto) do pote entre 1º e 2º lugar.
+        </div>
+      )}
 
       {creating && (
         <Card className="bg-zinc-900 border-purple-500/30 p-5">

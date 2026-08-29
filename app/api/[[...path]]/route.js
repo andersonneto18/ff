@@ -1316,7 +1316,7 @@ async function handleRoute(request, { params }) {
       if (route === '/admin/settings' && method === 'GET') {
         const rows = await db.collection('platform_settings').find({}).toArray()
         const map = Object.fromEntries(rows.map(s => [s.key, s.value]))
-        return J({ topupsEnabled: map.topupsEnabled !== '0', stripeEnabled: map.stripeEnabled !== '0', bonusEnabled: map.bonusEnabled === '1', mbwayPhone: map.mbwayPhone || null, platformIban: map.platformIban || null })
+        return J({ topupsEnabled: map.topupsEnabled !== '0', stripeEnabled: map.stripeEnabled !== '0', bonusEnabled: map.bonusEnabled === '1', tournamentFeesEnabled: map.tournamentFeesEnabled !== '0', mbwayPhone: map.mbwayPhone || null, platformIban: map.platformIban || null })
       }
 
       if (route === '/admin/settings' && method === 'POST') {
@@ -1371,9 +1371,19 @@ async function handleRoute(request, { params }) {
           }
           await logAudit(db, admin, body.bonusEnabled ? 'bonus_banner_enabled' : 'bonus_banner_disabled', 'platform', 'settings')
         }
+        if (typeof body.tournamentFeesEnabled !== 'undefined') {
+          const val = body.tournamentFeesEnabled ? '1' : '0'
+          const existing = await db.collection('platform_settings').findOne({ key: 'tournamentFeesEnabled' })
+          if (existing) {
+            await db.collection('platform_settings').updateOne({ key: 'tournamentFeesEnabled' }, { $set: { value: val } })
+          } else {
+            await db.collection('platform_settings').insertOne({ key: 'tournamentFeesEnabled', value: val })
+          }
+          await logAudit(db, admin, body.tournamentFeesEnabled ? 'tournament_fees_enabled' : 'tournament_fees_disabled', 'platform', 'settings')
+        }
         const updated = await db.collection('platform_settings').find({}).toArray()
         const map = Object.fromEntries(updated.map(s => [s.key, s.value]))
-        return J({ success: true, topupsEnabled: map.topupsEnabled !== '0', stripeEnabled: map.stripeEnabled !== '0', bonusEnabled: map.bonusEnabled === '1', mbwayPhone: map.mbwayPhone || null, platformIban: map.platformIban || null })
+        return J({ success: true, topupsEnabled: map.topupsEnabled !== '0', stripeEnabled: map.stripeEnabled !== '0', bonusEnabled: map.bonusEnabled === '1', tournamentFeesEnabled: map.tournamentFeesEnabled !== '0', mbwayPhone: map.mbwayPhone || null, platformIban: map.platformIban || null })
       }
 
       if (route === '/admin/dashboard' && method === 'GET') {
@@ -1949,7 +1959,10 @@ async function startTournamentBracket(db, tournament) {
   if (participants.length < 2) return false
   const shuffled = participants.sort(() => Math.random() - 0.5)
   const totalPot = tournament.entryFeeCents * shuffled.length
-  const commission = Math.round(totalPot * COMMISSION)
+  // Admin can switch tournament fees off — players then split the full gross pot, no platform cut
+  const feesSetting = await db.collection('platform_settings').findOne({ key: 'tournamentFeesEnabled' })
+  const feesEnabled = feesSetting?.value !== '0'
+  const commission = feesEnabled ? Math.round(totalPot * COMMISSION) : 0
   const net = totalPot - commission
   const prizeSecond = Math.round(net * 0.35)
   const prizeFirst = net - prizeSecond
