@@ -871,6 +871,12 @@ async function handleRoute(request, { params }) {
         await db.collection('tournaments').updateOne({ id: tId }, { $inc: { currentPlayers: 1 } })
         if (fee > 0) await db.collection('transactions').insertOne({ id: uuidv4(), userId: user.id, type: 'tournament_entry', amountCents: -fee, balance: newBalance, description: `Inscrição torneio: ${tournament.name}`, createdAt: new Date() })
         await createNotification(db, user.id, 'tournament', '🏆 Inscrição confirmada', `Estás inscrito no torneio "${tournament.name}". Aguarda o início!`)
+        // Duplas completas → arranca sozinho, sem esperar por um clique manual do admin
+        const justFilled = tournament.currentPlayers + 1 >= tournament.maxPlayers
+        if (justFilled) {
+          const freshTournament = await db.collection('tournaments').findOne({ id: tId })
+          await startTournamentBracket(db, freshTournament)
+        }
         return J({ ok: true, balanceCents: newBalance })
       }
 
@@ -938,6 +944,54 @@ async function handleRoute(request, { params }) {
         return J({ ok: true })
       }
 
+      // Helper: does userId belong to this duel — as one of the two registered entrants, or as
+      // the accepted duo partner of either? Used to gate both the pre-match chat and its read access.
+      async function canAccessMatch(match, userId) {
+        if (match.player1Id === userId || match.player2Id === userId) return true
+        const asPartner = await db.collection('tournament_participants').findOne({
+          tournamentId: tId, partnerId: userId, partnerStatus: 'ACEITE', userId: { $in: [match.player1Id, match.player2Id] },
+        })
+        return !!asPartner
+      }
+
+      const matchBeginMatch = tAction?.match(/^match\/([^\/]+)\/begin$/)
+      if (matchBeginMatch && method === 'POST') {
+        const user = await getUserFromRequest(request)
+        if (!user) return ERR('Não autenticado', 401)
+        const matchId = matchBeginMatch[1]
+        const match = await db.collection('tournament_matches').findOne({ id: matchId, tournamentId: tId })
+        if (!match) return ERR('Partida não encontrada', 404)
+        if (match.status !== 'PENDENTE') return ERR('Esta partida já foi decidida')
+        if (match.player1Id !== user.id) return ERR('Só quem cria a sala pode iniciar a partida', 403)
+        if (match.startedAt) return ERR('A partida já foi iniciada')
+        await db.collection('tournament_matches').updateOne({ id: matchId }, { $set: { startedAt: new Date() } })
+        await createNotification(db, match.player2Id, 'tournament', '⚔️ Partida iniciada', `O teu adversário criou a sala no torneio "${tournament.name}". Já podes entrar!`)
+        return J({ ok: true })
+      }
+
+      const matchMessagesMatch = tAction?.match(/^match\/([^\/]+)\/messages$/)
+      if (matchMessagesMatch) {
+        const user = await getUserFromRequest(request)
+        if (!user) return ERR('Não autenticado', 401)
+        const matchId = matchMessagesMatch[1]
+        const match = await db.collection('tournament_matches').findOne({ id: matchId, tournamentId: tId })
+        if (!match) return ERR('Partida não encontrada', 404)
+        if (!(await canAccessMatch(match, user.id))) return ERR('Não tens acesso a esta partida', 403)
+        if (method === 'GET') {
+          const msgs = await db.collection('tournament_match_messages').find({ matchId }).sort({ createdAt: 1 }).limit(200).toArray()
+          return J({ messages: msgs.map(clean) })
+        }
+        if (method === 'POST') {
+          const { message } = await request.json()
+          if (!message?.trim()) return ERR('Mensagem vazia')
+          const msg = { id: uuidv4(), matchId, userId: user.id, message: message.trim().slice(0, 1000), createdAt: new Date() }
+          await db.collection('tournament_match_messages').insertOne(msg)
+          const otherId = match.player1Id === user.id ? match.player2Id : match.player1Id
+          if (otherId && otherId !== 'BYE') await createNotification(db, otherId, 'tournament', '💬 Nova mensagem', `${user.name} enviou uma mensagem sobre o vosso duelo.`)
+          return J({ message: clean(msg) })
+        }
+      }
+
       const matchReportMatch = tAction?.match(/^match\/([^\/]+)\/report$/)
       if (matchReportMatch && method === 'POST') {
         const user = await getUserFromRequest(request)
@@ -965,6 +1019,7 @@ async function handleRoute(request, { params }) {
         const match = await db.collection('tournament_matches').findOne({ id: matchId, tournamentId: tId })
         if (!match) return ERR('Partida não encontrada', 404)
         if (match.status !== 'PENDENTE') return ERR('Esta partida já foi decidida')
+        if (!match.startedAt) return ERR('A partida ainda não foi iniciada — aguarda a sala ser criada')
         const isP1 = match.player1Id === user.id, isP2 = match.player2Id === user.id
         if (!isP1 && !isP2) return ERR('Não és participante desta partida', 403)
         const { result } = await request.json()
@@ -1633,20 +1688,8 @@ async function handleRoute(request, { params }) {
 
         if (tAction === 'start' && method === 'POST') {
           if (tournament.status !== 'ABERTO') return ERR('Torneio não está aberto')
-          const participants = await db.collection('tournament_participants').find({ tournamentId: tId }).toArray()
-          if (participants.length < 2) return ERR('Mínimo 2 jogadores para iniciar')
-          // Shuffle participants
-          const shuffled = participants.sort(() => Math.random() - 0.5)
-          const totalPot = tournament.entryFeeCents * shuffled.length
-          const commission = Math.round(totalPot * COMMISSION)
-          const net = totalPot - commission
-          // 2nd place gets 35% of the net pot (always a profit over their entry fee, guaranteed
-          // for tournaments with 4+ players — the enforced minimum), 1st gets the rest.
-          const prizeSecond = Math.round(net * 0.35)
-          const prizeFirst = net - prizeSecond
-          await db.collection('tournaments').updateOne({ id: tId }, { $set: { status: 'EM_ANDAMENTO', currentRound: 1, startedAt: new Date(), prizeFirstCents: prizeFirst, prizeSecondCents: prizeSecond, commissionCents: commission } })
-          await generateRoundMatches(db, tId, shuffled.map(p => p.userId), 1, tournament.name)
-          for (const p of shuffled) await createNotification(db, p.userId, 'tournament', '🏆 Torneio iniciado!', `O torneio "${tournament.name}" começou! Verifica o teu duelo na tab Torneios.`)
+          const started = await startTournamentBracket(db, tournament)
+          if (!started) return ERR('Mínimo 2 jogadores para iniciar')
           await logAudit(db, admin, 'tournament_started', 'tournament', tId, '')
           return J({ ok: true })
         }
@@ -1887,6 +1930,23 @@ async function handleRoute(request, { params }) {
     console.error('API Error:', e)
     return ERR('Erro interno: ' + e.message, 500)
   }
+}
+
+// Shuffles entrants, computes the prize split, flips the tournament to EM_ANDAMENTO and generates
+// round 1 — shared by the admin's manual "Iniciar" and the auto-start once duplas fill up.
+async function startTournamentBracket(db, tournament) {
+  const participants = await db.collection('tournament_participants').find({ tournamentId: tournament.id }).toArray()
+  if (participants.length < 2) return false
+  const shuffled = participants.sort(() => Math.random() - 0.5)
+  const totalPot = tournament.entryFeeCents * shuffled.length
+  const commission = Math.round(totalPot * COMMISSION)
+  const net = totalPot - commission
+  const prizeSecond = Math.round(net * 0.35)
+  const prizeFirst = net - prizeSecond
+  await db.collection('tournaments').updateOne({ id: tournament.id }, { $set: { status: 'EM_ANDAMENTO', currentRound: 1, startedAt: new Date(), prizeFirstCents: prizeFirst, prizeSecondCents: prizeSecond, commissionCents: commission } })
+  await generateRoundMatches(db, tournament.id, shuffled.map(p => p.userId), 1, tournament.name)
+  for (const p of shuffled) await createNotification(db, p.userId, 'tournament', '🏆 Torneio iniciado!', `O torneio "${tournament.name}" começou! Verifica o teu duelo na tab Torneios.`)
+  return true
 }
 
 async function generateRoundMatches(db, tournamentId, playerIds, round, tournamentName) {
